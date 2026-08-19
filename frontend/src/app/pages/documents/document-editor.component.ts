@@ -5,7 +5,7 @@ import { DocumentItem, DocumentService, SignatureField, Signer } from '../../cor
 import { AuthService } from '../../core/services/auth.service';
 import * as pdfjsLib from 'pdfjs-dist';
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 
 type FieldType = SignatureField['type'];
 
@@ -547,11 +547,11 @@ export class DocumentEditorComponent implements OnInit {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const buffer = await res.arrayBuffer();
       const data = new Uint8Array(buffer);
-      try {
-        this.pdfDoc = await pdfjsLib.getDocument({ data }).promise;
-      } catch {
-        this.pdfDoc = await pdfjsLib.getDocument({ data, disableWorker: true }).promise;
+      const head = new TextDecoder('latin1').decode(data.slice(0, 5));
+      if (head !== '%PDF-') {
+        throw new Error('Réponse invalide (pas un PDF)');
       }
+      this.pdfDoc = await pdfjsLib.getDocument({ data, disableWorker: true } as never).promise;
       this.pageCount.set(this.pdfDoc.numPages);
       this.page.set(1);
       await this.renderPage();
