@@ -31,6 +31,7 @@ RUN composer install --no-dev --prefer-dist --no-interaction --optimize-autoload
 COPY backend/docker/php-prod.ini /usr/local/etc/php/conf.d/signflow.ini
 COPY cloud/nginx.conf.template /etc/nginx/templates/signflow.conf.template
 COPY cloud/entrypoint.sh /entrypoint.sh
+COPY cloud/write-db-env.php /write-db-env.php
 COPY --from=frontend /app/dist/frontend/browser /usr/share/nginx/html
 
 RUN sed -i 's/\r$//' /entrypoint.sh && chmod +x /entrypoint.sh \

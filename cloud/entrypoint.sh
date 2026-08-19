@@ -24,12 +24,30 @@ export CACHE_STORE="${CACHE_STORE:-file}"
 export SESSION_DRIVER="${SESSION_DRIVER:-file}"
 export MAIL_MAILER="${MAIL_MAILER:-log}"
 export DB_CONNECTION="${DB_CONNECTION:-pgsql}"
-export DB_URL="${DB_URL:-${DATABASE_URL:-}}"
+export DB_SSLMODE="${DB_SSLMODE:-require}"
 
-# .env.example uses Docker hostname "postgres" — strip it on Render/PaaS.
-if [ -n "${DB_URL}${DATABASE_URL}" ] || { [ -n "${DB_HOST:-}" ] && [ "${DB_HOST}" != "postgres" ]; }; then
-  sed -i '/^DB_HOST=/d;/^DB_PORT=/d;/^DB_DATABASE=/d;/^DB_USERNAME=/d;/^DB_PASSWORD=/d;/^DB_URL=/d' .env
+if [ -n "${DATABASE_URL:-}${DB_URL:-}" ]; then
+  php /write-db-env.php
+else
+  echo "DATABASE_URL manquant : la base Render n'est pas liee au service."
+  env | grep -E '^(DATABASE_URL|DB_|RENDER_)' | sed 's/=.*/=***/' || true
+  exit 1
 fi
+
+set -a
+. ./.env
+set +a
+
+export APP_ENV=production
+export APP_DEBUG=false
+export LOG_CHANNEL=stderr
+export FILESYSTEM_DISK=local
+export QUEUE_CONNECTION=sync
+export CACHE_STORE=file
+export SESSION_DRIVER=file
+export MAIL_MAILER=log
+export DB_CONNECTION=pgsql
+export DB_SSLMODE="${DB_SSLMODE:-require}"
 
 if [ -z "${APP_KEY:-}" ]; then
   export APP_KEY="$(php artisan key:generate --show --no-interaction)"
