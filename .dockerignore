@@ -1,0 +1,15 @@
+.git
+.github
+**/.angular
+**/node_modules
+frontend/dist
+backend/vendor
+backend/.env
+.env
+.env.production
+**/*.sqlite
+**/storage/logs/*
+**/storage/app/documents/*
+*.md
+start-prod.ps1
+activer-virtualisation.bat

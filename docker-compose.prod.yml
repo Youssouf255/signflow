@@ -64,6 +64,7 @@ services:
       MAIL_MAILER: log
       LIBREOFFICE_PATH: /usr/bin/soffice
       RUN_SEED: "false"
+      RUN_MIGRATE: "false"
     volumes:
       - storage_data:/var/www/html/storage/app
     depends_on:

@@ -212,8 +212,10 @@ class DocumentService
             ->whereIn('status', ['pending', 'notified'])
             ->get();
 
+        $base = rtrim((string) ($request?->getSchemeAndHttpHost() ?: config('app.frontend_url')), '/');
+
         foreach ($targets as $signer) {
-            $link = rtrim(config('app.frontend_url'), '/').'/sign/'.$signer->access_token;
+            $link = $base.'/sign/'.$signer->access_token;
             Mail::to($signer->email)->send(new SigningInvitationMail($document, $signer, $link));
 
             $signer->update([
@@ -229,7 +231,7 @@ class DocumentService
         // Observers are notified once at send time
         if ($document->status === 'sent') {
             foreach ($document->signers()->where('role', 'observer')->get() as $observer) {
-                $link = rtrim(config('app.frontend_url'), '/').'/sign/'.$observer->access_token;
+                $link = $base.'/sign/'.$observer->access_token;
                 Mail::to($observer->email)->send(new SigningInvitationMail($document, $observer, $link));
                 $this->audit->log($document, 'email.delivered', $request, null, $observer, [
                     'email' => $observer->email,

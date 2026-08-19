@@ -1,0 +1,44 @@
+databases:
+  - name: signflow-db
+    plan: free
+    region: frankfurt
+    databaseName: signflow
+    user: signflow
+    postgresMajorVersion: 16
+
+services:
+  - type: web
+    name: signflow
+    runtime: docker
+    plan: free
+    region: frankfurt
+    dockerfilePath: ./Dockerfile.cloud
+    dockerContext: .
+    healthCheckPath: /up
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: APP_DEBUG
+        value: "false"
+      - key: LOG_CHANNEL
+        value: stderr
+      - key: FILESYSTEM_DISK
+        value: local
+      - key: QUEUE_CONNECTION
+        value: sync
+      - key: CACHE_STORE
+        value: file
+      - key: SESSION_DRIVER
+        value: file
+      - key: MAIL_MAILER
+        value: log
+      - key: RUN_SEED
+        value: "true"
+      - key: DB_CONNECTION
+        value: pgsql
+      - key: DB_SSLMODE
+        value: require
+      - key: DATABASE_URL
+        fromDatabase:
+          name: signflow-db
+          property: connectionString

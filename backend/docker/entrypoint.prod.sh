@@ -10,7 +10,9 @@ if [ -z "$APP_KEY" ]; then
   php artisan key:generate --force --no-interaction
 fi
 
-php artisan migrate --force --no-interaction
+if [ "${RUN_MIGRATE:-true}" = "true" ]; then
+  php artisan migrate --force --no-interaction
+fi
 
 if [ "${RUN_SEED:-true}" = "true" ]; then
   php artisan db:seed --force --no-interaction || true

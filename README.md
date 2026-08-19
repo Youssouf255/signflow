@@ -51,24 +51,97 @@ Le premier lancement crée `.env.production`. Renseignez `APP_URL` et `FRONTEND_
 
 Puis ouvrez http://localhost/
 
-### 2. Sur un VPS cloud (DigitalOcean, Oracle, Contabo, AWS…)
+### 2. Render (recommandé — sans carte bancaire)
 
-1. Créez un serveur Ubuntu 22.04 avec Docker + Docker Compose.
-2. Copiez le projet (git clone ou zip).
-3. Copiez `.env.production.example` vers `.env.production`.
-4. Générez une clé : `docker run --rm php:8.3-cli php -r "echo 'base64:'.base64_encode(random_bytes(32));"`
-5. Remplacez `VOTRE_IP_OU_DOMAINE` par l’IP publique ou le domaine (`http://203.0.113.10` ou `https://signflow.mondomaine.com`).
-6. Lancez :
+Compte avec e-mail / GitHub, **pas de VM Oracle**. HTTPS inclus. Word/Excel → PDF n’est pas disponible sur ce plan (image trop lourde) : testez avec des **PDF**.
 
-```bash
-docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+1. Poussez ce dépôt sur GitHub (`Youssouf255/signflow`).
+2. Créez un compte sur [render.com](https://render.com) (Continue with GitHub).
+3. **New +** → **Blueprint** → sélectionnez le dépôt `signflow`.
+4. Appliquez le Blueprint (`render.yaml`) : un service web + PostgreSQL.
+5. Attendez le build (souvent 8–15 min).
+6. Ouvrez l’URL `https://signflow-xxxx.onrender.com`.
+
+Compte démo : `youssouf@signflow.local` / `password`.
+
+L’app s’endort après ~15 min d’inactivité (premier chargement ~1 min). Postgres gratuit expire après 30 jours.
+
+### 3. Sans aucun cloud : tunnel depuis ce PC
+
+Si Docker prod tourne déjà sur http://localhost/ :
+
+```powershell
+.\cloud\publier-local.ps1
 ```
 
-L’application est alors sur `http://IP/` (ouvrez le port **80** dans le pare-feu).
+Cloudflare affiche une URL `https://xxxxx.trycloudflare.com`. Elle change à chaque lancement. Le PC doit rester allumé.
 
-Pour HTTPS plus tard : placez Caddy ou un reverse-proxy (Nginx + Let’s Encrypt) devant le port 80.
+### 4. Oracle Cloud Always Free (si l’inscription aboutit plus tard)
 
-Les emails d’invitation sont écrits dans les logs (`MAIL_MAILER=log`) en test. Les liens **Signer maintenant** restent utilisables dans l’interface.
+#### A. Compte et clé SSH (sur votre PC Windows)
+
+1. Créez le compte : [cloud.oracle.com](https://www.oracle.com/cloud/free/). Choisissez une **Home Region** avec Ampere (ex. Frankfurt, Amsterdam, Ashburn) : elle ne se change plus.
+2. Générez la clé SSH dans PowerShell :
+
+```powershell
+.\cloud\generer-cle-ssh-oracle.ps1
+```
+
+Copiez le bloc `ssh-rsa ...` affiché (clé **publique**).
+
+#### B. Créer la VM dans la console Oracle
+
+1. **Compute → Instances → Create instance**.
+2. Image : **Canonical Ubuntu 24.04** (variante **aarch64** / ARM).
+3. Shape : **Ampere** → `VM.Standard.A1.Flex` → **4 OCPU** et **24 GB** memory. Badge Always Free-eligible.
+4. Disque de boot : **100 GB** si possible (images Docker + LibreOffice).
+5. Clés SSH : **Paste public key** → collez la clé du script.
+6. Vérifiez qu’une **IP publique** est assignée, puis Create.
+7. Si « Out of capacity » : changez d’Availability Domain, ou une autre région proche, puis réessayez.
+
+#### C. Ouvrir le port 80 (indispensable)
+
+Oracle bloque le web tant que cette règle n’existe pas :
+
+1. Cliquez l’instance → **Virtual cloud network** (ou **Subnet**).
+2. **Security Lists** → Default Security List → **Add Ingress Rules**.
+3. Source CIDR `0.0.0.0/0`, IP protocol **TCP**, Destination port **80**.
+4. Ajoutez la même règle pour le port **443** (HTTPS plus tard).
+
+Laissez le port **22** ouvert pour SSH.
+
+#### D. Installer SignFlow sur la VM
+
+Dans PowerShell, remplacez `IP_PUBLIQUE` :
+
+```powershell
+ssh -i $HOME\.ssh\oracle_signflow ubuntu@IP_PUBLIQUE
+```
+
+Sur la VM :
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Youssouf255/signflow/main/cloud/oracle-setup.sh | bash
+```
+
+La **première** construction dure souvent **15 à 40 minutes** (LibreOffice). Ensuite ouvrez `http://IP_PUBLIQUE/`.
+
+Compte démo : `youssouf@signflow.local` / `password` (ou `youssouf.bah@undp.org`).
+
+Les e-mails d’invitation sont dans les logs Docker (`MAIL_MAILER=log`). Utilisez **Signer maintenant** dans l’interface.
+
+Suivi :
+
+```bash
+cd ~/signflow
+sudo docker compose -f docker-compose.prod.yml --env-file .env.production logs -f
+```
+
+**Important :** le script `oracle-setup.sh` doit être présent sur GitHub (`main`). Poussez ce dépôt avant d’exécuter le `curl` sur la VM.
+
+### 3. Autre VPS (DigitalOcean, Contabo, AWS…)
+
+Même principe : Ubuntu + Docker, clone du dépôt, puis `bash cloud/oracle-setup.sh` (le script fonctionne hors Oracle). Ouvrez le port 80 dans le pare-feu du fournisseur.
 
 ## Workflow MVP
 
