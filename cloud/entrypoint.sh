@@ -26,6 +26,11 @@ export MAIL_MAILER="${MAIL_MAILER:-log}"
 export DB_CONNECTION="${DB_CONNECTION:-pgsql}"
 export DB_URL="${DB_URL:-${DATABASE_URL:-}}"
 
+# .env.example uses Docker hostname "postgres" — strip it on Render/PaaS.
+if [ -n "${DB_URL}${DATABASE_URL}" ] || { [ -n "${DB_HOST:-}" ] && [ "${DB_HOST}" != "postgres" ]; }; then
+  sed -i '/^DB_HOST=/d;/^DB_PORT=/d;/^DB_DATABASE=/d;/^DB_USERNAME=/d;/^DB_PASSWORD=/d;/^DB_URL=/d' .env
+fi
+
 if [ -z "${APP_KEY:-}" ]; then
   export APP_KEY="$(php artisan key:generate --show --no-interaction)"
 fi
