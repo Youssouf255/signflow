@@ -58,6 +58,15 @@ $clean = static function (?string $value): string {
 $mailUser = $clean(getenv('MAIL_USERNAME') ?: '');
 $mailPass = str_replace(' ', '', $clean(getenv('MAIL_PASSWORD') ?: ''));
 $mailHost = $clean(getenv('MAIL_HOST') ?: '');
+if ($mailHost === '' && str_contains($mailUser, '@')) {
+    $domain = strtolower((string) substr(strrchr($mailUser, '@'), 1));
+    $mailHost = match (true) {
+        str_contains($domain, 'gmail') || $domain === 'googlemail.com' => 'smtp.gmail.com',
+        str_contains($domain, 'yahoo') => 'smtp.mail.yahoo.com',
+        str_contains($domain, 'outlook') || str_contains($domain, 'hotmail') || str_contains($domain, 'live.com') || str_contains($domain, 'office365') => 'smtp.office365.com',
+        default => 'smtp.gmail.com',
+    };
+}
 $mailPort = $clean(getenv('MAIL_PORT') ?: '587');
 $mailEncryption = $clean(getenv('MAIL_ENCRYPTION') ?: 'tls');
 $mailFrom = $clean(getenv('MAIL_FROM_ADDRESS') ?: $mailUser);
@@ -77,7 +86,7 @@ $keys = [
     'DB_URL', 'DATABASE_URL', 'DB_SSLMODE',
     'SESSION_DRIVER', 'QUEUE_CONNECTION', 'CACHE_STORE', 'CACHE_DRIVER',
     'FILESYSTEM_DISK', 'MAIL_MAILER', 'MAIL_HOST', 'MAIL_PORT', 'MAIL_USERNAME',
-    'MAIL_PASSWORD', 'MAIL_ENCRYPTION', 'MAIL_FROM_ADDRESS', 'MAIL_FROM_NAME',
+    'MAIL_PASSWORD', 'MAIL_ENCRYPTION', 'MAIL_FROM_ADDRESS', 'MAIL_FROM_NAME', 'MAIL_EHLO_DOMAIN',
     'LOG_CHANNEL', 'REDIS_CLIENT',
 ];
 $lines = preg_split("/\r\n|\n|\r/", $env) ?: [];
@@ -101,6 +110,7 @@ $lines[] = 'APP_URL='.$quote($appUrl);
 $lines[] = 'FRONTEND_URL='.$quote($frontendUrl);
 if ($sanctumHost !== '') {
     $lines[] = 'SANCTUM_STATEFUL_DOMAINS='.$quote($sanctumHost);
+    $lines[] = 'MAIL_EHLO_DOMAIN='.$quote($sanctumHost);
 }
 $lines[] = 'DB_CONNECTION=pgsql';
 $lines[] = 'DB_HOST='.$quote($host);

@@ -27,6 +27,12 @@ export interface SignatureField {
   value?: string;
 }
 
+export interface MailInvitations {
+  sent?: string[];
+  failed?: string[];
+  mailer?: string;
+}
+
 export interface DocumentItem {
   id: number;
   title: string;
@@ -42,6 +48,7 @@ export interface DocumentItem {
   original_hash?: string;
   signed_hash?: string;
   reference?: string;
+  invitations?: MailInvitations;
 }
 
 export interface AuditLog {

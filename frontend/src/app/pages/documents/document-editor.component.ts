@@ -100,7 +100,7 @@ type FieldType = SignatureField['type'];
                 <div class="edit-card" [formGroupName]="i">
                   <label>Prénom<input formControlName="first_name" /></label>
                   <label>Nom<input formControlName="last_name" /></label>
-                  <label>Email<input type="email" formControlName="email" /></label>
+                  <label>Email<input type="email" formControlName="email" placeholder="ex.  nom@gmail.com" /></label>
                 </div>
               }
             </div>
@@ -290,10 +290,8 @@ export class DocumentEditorComponent implements OnInit {
           this.fields.set(fields);
           this.loading.set(false);
           this.editingSigners.set(false);
-          this.saveOk.set(
-            'Noms mis à jour : ' + list.map((s) => `${s.first_name} ${s.last_name}`).join(', ')
-          );
-          this.status.set('Noms des signataires mis à jour.');
+          this.saveOk.set(this.invitationMessage(doc, list));
+          this.status.set(this.invitationMessage(doc, list));
         };
 
         if (!remapped.length) {
@@ -534,6 +532,19 @@ export class DocumentEditorComponent implements OnInit {
         this.error.set(err?.error?.message || 'Enregistrement impossible');
       },
     });
+  }
+
+  private invitationMessage(doc: DocumentItem, list: Signer[]): string {
+    const sent = doc.invitations?.sent || [];
+    const failed = doc.invitations?.failed || [];
+    const names = 'Signataires : ' + list.map((s) => `${s.first_name} ${s.last_name}`).join(', ');
+    if (sent.length) {
+      return names + '. Invitation envoyée à ' + sent.join(', ') + (failed.length ? '. Échec : ' + failed.join(', ') : '');
+    }
+    if (failed.length) {
+      return names + '. E-mail non envoyé (' + failed.join(', ') + '). Vérifiez SMTP sur Render.';
+    }
+    return names + '.';
   }
 
   private async loadPdf(doc: DocumentItem) {

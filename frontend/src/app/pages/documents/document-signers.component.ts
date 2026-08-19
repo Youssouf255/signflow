@@ -11,7 +11,7 @@ import { DocumentItem, DocumentService } from '../../core/services/document.serv
     <div class="page">
       <a class="back" [routerLink]="['/app/documents', docId]">← Retour au document</a>
       <h2>Ajouter les signataires</h2>
-      <p class="sub">Document : {{ doc()?.title || ('#' + docId) }}</p>
+      <p class="sub">Document : {{ doc()?.title || ('#' + docId) }}. Un e-mail d’invitation est envoyé dès qu’un signataire est enregistré (Gmail, Outlook, Yahoo, etc.).</p>
 
       @if (!ready()) {
         <p class="info">Chargement des signataires…</p>
@@ -29,7 +29,7 @@ import { DocumentItem, DocumentService } from '../../core/services/document.serv
                     <input formControlName="last_name" autocomplete="family-name" />
                   </label>
                   <label>Email
-                    <input type="email" formControlName="email" autocomplete="email" />
+                    <input type="email" formControlName="email" autocomplete="email" placeholder="gmail, outlook, yahoo…" />
                   </label>
                   <label>Ordre
                     <input type="number" min="1" formControlName="signing_order" />
@@ -176,9 +176,20 @@ export class DocumentSignersComponent implements OnInit {
     this.info.set('Enregistrement en cours…');
 
     this.documents.syncSigners(this.docId, payload).subscribe({
-      next: () => {
+      next: (doc) => {
         this.loading.set(false);
-        this.info.set("Signataires enregistrés. Ouverture de l'éditeur…");
+        const sent = doc.invitations?.sent || [];
+        const failed = doc.invitations?.failed || [];
+        if (failed.length && !sent.length) {
+          this.error.set('Signataires enregistrés, mais aucun e-mail n’a pu partir. Vérifiez SMTP sur Render (MAIL_USERNAME / MAIL_PASSWORD). Échec : ' + failed.join(', '));
+          return;
+        }
+        const extra = failed.length ? ' Échec pour : ' + failed.join(', ') : '';
+        this.info.set(
+          (sent.length ? 'Invitation envoyée à ' + sent.join(', ') + '.' : 'Signataires enregistrés.') +
+            extra +
+            " Ouverture de l'éditeur…"
+        );
         this.router.navigate(['/app/documents', this.docId, 'editor']).then((ok) => {
           if (!ok) {
             this.error.set("Enregistré, mais navigation vers l'éditeur impossible. Ouvrez l'éditeur depuis la fiche.");

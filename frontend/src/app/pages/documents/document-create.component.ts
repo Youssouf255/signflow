@@ -44,7 +44,7 @@ import { DocumentService } from '../../core/services/document.service';
                 <div class="grid">
                   <label>Prénom<input formControlName="first_name" /></label>
                   <label>Nom<input formControlName="last_name" /></label>
-                  <label>Email<input type="email" formControlName="email" /></label>
+                  <label>Email<input type="email" formControlName="email" placeholder="gmail, outlook, yahoo…" /></label>
                   <label>Ordre<input type="number" min="1" formControlName="signing_order" /></label>
                   <label>Rôle
                     <select formControlName="role">

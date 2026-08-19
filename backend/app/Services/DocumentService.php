@@ -61,29 +61,56 @@ class DocumentService
 
     public function syncSigners(Document $document, array $signers, Request $request, User $user): Document
     {
-        return DB::transaction(function () use ($document, $signers, $request, $user) {
-            $document->fields()->delete();
-            $document->signers()->delete();
+        $newSignerIds = [];
+
+        $document = DB::transaction(function () use ($document, $signers, $request, $user, &$newSignerIds) {
+            $existing = $document->signers()->get()->keyBy(fn (Signer $signer) => strtolower(trim($signer->email)));
+            $keepIds = [];
 
             foreach ($signers as $index => $signerData) {
-                Signer::create([
-                    'document_id' => $document->id,
+                $email = strtolower(trim((string) $signerData['email']));
+                $payload = [
                     'first_name' => $signerData['first_name'],
                     'last_name' => $signerData['last_name'],
-                    'email' => $signerData['email'],
+                    'email' => $email,
                     'signing_order' => $signerData['signing_order'] ?? ($index + 1),
                     'role' => $signerData['role'] ?? 'signer',
+                    'token_expires_at' => $document->expires_at,
+                ];
+
+                $current = $existing->get($email);
+                if ($current) {
+                    $current->update($payload);
+                    $keepIds[] = $current->id;
+                    continue;
+                }
+
+                $created = Signer::create($payload + [
+                    'document_id' => $document->id,
                     'status' => 'pending',
                     'access_token' => hash('sha256', Str::uuid()->toString().Str::random(40)),
-                    'token_expires_at' => $document->expires_at,
                 ]);
+                $keepIds[] = $created->id;
+                $newSignerIds[] = $created->id;
             }
 
-            $document->update(['signers_count' => count($signers)]);
+            $removed = $document->signers()->whereNotIn('id', $keepIds)->get();
+            foreach ($removed as $signer) {
+                $signer->fields()->delete();
+                $signer->delete();
+            }
+
+            $document->update(['signers_count' => count($keepIds)]);
             $this->audit->log($document, 'signers.updated', $request, $user);
 
             return $document->fresh(['signers', 'fields']);
         });
+
+        $toInvite = $document->signers->filter(fn (Signer $signer) => in_array($signer->id, $newSignerIds, false));
+        $invitations = $this->inviteSigners($document, $toInvite, $request);
+        $document->setAttribute('invitations', $invitations);
+
+        return $document;
     }
 
     public function syncFields(Document $document, array $fields, Request $request, User $user): Document
@@ -197,55 +224,28 @@ class DocumentService
         ]);
 
         $this->audit->log($document, 'document.sent', $request, $user);
-        $this->notifyNextSigners($document, $request);
+        $invitations = $this->notifyNextSigners($document, $request);
 
-        return $document->fresh(['signers', 'fields', 'auditLogs']);
+        $document = $document->fresh(['signers', 'fields', 'auditLogs']);
+        $document->setAttribute('invitations', $invitations);
+
+        return $document;
     }
 
-    public function notifyNextSigners(Document $document, ?Request $request = null): void
+    public function notifyNextSigners(Document $document, ?Request $request = null): array
     {
-        $nextOrder = $document->signers()
-            ->where('role', '!=', 'observer')
-            ->whereNotIn('status', ['signed', 'approved', 'declined'])
-            ->min('signing_order');
-
-        if ($nextOrder === null) {
-            return;
-        }
-
         $targets = $document->signers()
-            ->where('signing_order', $nextOrder)
-            ->where('role', '!=', 'observer')
-            ->whereIn('status', ['pending', 'notified'])
+            ->whereNotIn('status', ['signed', 'approved', 'declined'])
+            ->whereNull('notified_at')
             ->get();
 
-        $base = $this->publicBaseUrl();
-
-        foreach ($targets as $signer) {
-            $link = $base.'/sign/'.$signer->access_token;
-            $this->deliverMail($signer->email, new SigningInvitationMail($document, $signer, $link), $document, $request, $signer);
-            $signer->update([
-                'status' => 'notified',
-                'notified_at' => now(),
-            ]);
-        }
-
-        if ($document->status === 'sent') {
-            foreach ($document->signers()->where('role', 'observer')->get() as $observer) {
-                $link = $base.'/sign/'.$observer->access_token;
-                $this->deliverMail(
-                    $observer->email,
-                    new SigningInvitationMail($document, $observer, $link),
-                    $document,
-                    $request,
-                    $observer
-                );
-            }
-        }
+        $invitations = $this->inviteSigners($document, $targets, $request);
 
         if ($document->status === 'sent') {
             $document->update(['status' => 'in_progress']);
         }
+
+        return $invitations;
     }
 
     public function notifyDocumentCompleted(Document $document, ?Request $request = null): void
@@ -302,6 +302,44 @@ class DocumentService
         }
 
         return rtrim((string) config('app.url'), '/');
+    }
+
+    private function inviteSigners(Document $document, iterable $signers, ?Request $request = null): array
+    {
+        $sent = [];
+        $failed = [];
+        $base = $this->publicBaseUrl();
+
+        foreach ($signers as $signer) {
+            if (! $signer instanceof Signer) {
+                continue;
+            }
+
+            $link = $base.'/sign/'.$signer->access_token;
+            $ok = $this->deliverMail(
+                $signer->email,
+                new SigningInvitationMail($document, $signer, $link),
+                $document,
+                $request,
+                $signer
+            );
+
+            if ($ok) {
+                $signer->update([
+                    'status' => in_array($signer->status, ['pending', 'notified'], true) ? 'notified' : $signer->status,
+                    'notified_at' => now(),
+                ]);
+                $sent[] = $signer->email;
+            } else {
+                $failed[] = $signer->email;
+            }
+        }
+
+        return [
+            'sent' => $sent,
+            'failed' => $failed,
+            'mailer' => config('mail.default'),
+        ];
     }
 
     private function deliverMail(
