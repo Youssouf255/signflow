@@ -2,14 +2,18 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\DocumentPayloadStore;
 use App\Services\SigningService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
-use Symfony\Component\HttpFoundation\StreamedResponse;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class SigningController extends Controller
 {
-    public function __construct(private SigningService $signing) {}
+    public function __construct(
+        private SigningService $signing,
+        private DocumentPayloadStore $payloads
+    ) {}
 
     public function show(string $token, Request $request)
     {
@@ -48,21 +52,15 @@ class SigningController extends Controller
         return response()->json(['message' => 'ok']);
     }
 
-    public function file(string $token): StreamedResponse
+    public function file(string $token): BinaryFileResponse
     {
         $signer = $this->signing->resolveByToken($token);
-        $document = $signer->document;
-        $path = $document->signed_file ?: $document->original_file;
-        $disk = Storage::disk('local');
+        $path = $this->payloads->ensureLocal($signer->document);
+        $absolute = Storage::disk('local')->path($path);
 
-        if (! $disk->exists($path) && config('filesystems.documents_disk') === 's3') {
-            $disk->put($path, Storage::disk('s3')->get($path));
-        }
-
-        abort_unless($disk->exists($path), 404);
-
-        return $disk->response($path, basename($path), [
+        return response()->file($absolute, [
             'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="document.pdf"',
         ]);
     }
 

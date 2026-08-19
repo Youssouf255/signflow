@@ -14,7 +14,9 @@ class Document extends Model
         'title',
         'description',
         'original_file',
+        'original_payload',
         'signed_file',
+        'signed_payload',
         'original_hash',
         'signed_hash',
         'status',
@@ -22,6 +24,11 @@ class Document extends Model
         'expires_at',
         'sent_at',
         'completed_at',
+    ];
+
+    protected $hidden = [
+        'original_payload',
+        'signed_payload',
     ];
 
     protected function casts(): array

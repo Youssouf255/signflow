@@ -14,7 +14,8 @@ class SigningService
     public function __construct(
         private AuditService $audit,
         private PdfService $pdf,
-        private DocumentService $documents
+        private DocumentService $documents,
+        private DocumentPayloadStore $payloads
     ) {}
 
     public function resolveByToken(string $token): Signer
@@ -152,6 +153,8 @@ class SigningService
                 'signed_hash' => $hash,
                 'status' => 'in_progress',
             ]);
+
+            $this->payloads->persistSigned($document, $signedPath);
 
             $this->audit->log($document, 'document.signed', $request, null, $signer, [
                 'method' => $data['method'] ?? 'draw',

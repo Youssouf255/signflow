@@ -18,7 +18,8 @@ class DocumentService
     public function __construct(
         private AuditService $audit,
         private PdfService $pdf,
-        private DocumentConversionService $conversion
+        private DocumentConversionService $conversion,
+        private DocumentPayloadStore $payloads
     ) {}
 
     public function create(User $owner, array $data, UploadedFile $file, Request $request): Document
@@ -49,6 +50,8 @@ class DocumentService
                 'source_format' => $stored['extension'],
                 'source_file' => $stored['source_relative'],
             ]);
+
+            $this->payloads->persistOriginal($document, $path);
 
             return $document->load(['signers', 'fields']);
         });
@@ -169,6 +172,8 @@ class DocumentService
                 'source_format' => $stored['extension'],
                 'source_file' => $stored['source_relative'],
             ]);
+
+            $this->payloads->persistOriginal($document, $path);
 
             return $document->fresh(['signers', 'fields']);
         });

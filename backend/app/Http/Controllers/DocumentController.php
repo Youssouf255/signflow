@@ -3,14 +3,18 @@
 namespace App\Http\Controllers;
 
 use App\Models\Document;
+use App\Services\DocumentPayloadStore;
 use App\Services\DocumentService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
-use Symfony\Component\HttpFoundation\StreamedResponse;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class DocumentController extends Controller
 {
-    public function __construct(private DocumentService $documents) {}
+    public function __construct(
+        private DocumentService $documents,
+        private DocumentPayloadStore $payloads
+    ) {}
 
     public function index(Request $request)
     {
@@ -190,21 +194,16 @@ class DocumentController extends Controller
         return response()->json($document);
     }
 
-    public function file(Request $request, Document $document): StreamedResponse
+    public function file(Request $request, Document $document): BinaryFileResponse
     {
         $this->authorizeOwner($request, $document);
 
-        $path = $document->signed_file ?: $document->original_file;
-        $disk = Storage::disk('local');
+        $path = $this->payloads->ensureLocal($document);
+        $absolute = Storage::disk('local')->path($path);
 
-        if (! $disk->exists($path) && config('filesystems.documents_disk') === 's3') {
-            $disk->put($path, Storage::disk('s3')->get($path));
-        }
-
-        abort_unless($disk->exists($path), 404);
-
-        return $disk->response($path, basename($path), [
+        return response()->file($absolute, [
             'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="document.pdf"',
         ]);
     }
 
