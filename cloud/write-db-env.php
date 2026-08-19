@@ -35,9 +35,22 @@ $dbUrl = sprintf(
     $q !== '' ? '?'.$q : ''
 );
 
+$appKey = (string) (getenv('APP_KEY') ?: '');
+if ($appKey === '' || $appKey === 'base64:') {
+    $appKey = 'base64:'.base64_encode(random_bytes(32));
+}
+
+$appUrl = rtrim((string) (getenv('APP_URL') ?: (getenv('RENDER_EXTERNAL_URL') ?: 'http://localhost')), '/');
+$frontendUrl = rtrim((string) (getenv('FRONTEND_URL') ?: $appUrl), '/');
+$sanctumHost = (string) (getenv('SANCTUM_STATEFUL_DOMAINS') ?: (getenv('RENDER_EXTERNAL_HOSTNAME') ?: ''));
+if ($sanctumHost === '' && $appUrl !== '') {
+    $sanctumHost = (string) (parse_url($appUrl, PHP_URL_HOST) ?: '');
+}
+
 $envPath = '.env';
 $env = is_file($envPath) ? (string) file_get_contents($envPath) : '';
 $keys = [
+    'APP_ENV', 'APP_DEBUG', 'APP_KEY', 'APP_URL', 'FRONTEND_URL', 'SANCTUM_STATEFUL_DOMAINS',
     'DB_CONNECTION', 'DB_HOST', 'DB_PORT', 'DB_DATABASE', 'DB_USERNAME', 'DB_PASSWORD',
     'DB_URL', 'DATABASE_URL', 'DB_SSLMODE',
     'SESSION_DRIVER', 'QUEUE_CONNECTION', 'CACHE_STORE', 'CACHE_DRIVER',
@@ -57,6 +70,14 @@ $quote = static function (string $value): string {
     return '"'.str_replace(['\\', '"', '$'], ['\\\\', '\\"', '\\$'], $value).'"';
 };
 
+$lines[] = 'APP_ENV=production';
+$lines[] = 'APP_DEBUG=false';
+$lines[] = 'APP_KEY='.$quote($appKey);
+$lines[] = 'APP_URL='.$quote($appUrl);
+$lines[] = 'FRONTEND_URL='.$quote($frontendUrl);
+if ($sanctumHost !== '') {
+    $lines[] = 'SANCTUM_STATEFUL_DOMAINS='.$quote($sanctumHost);
+}
 $lines[] = 'DB_CONNECTION=pgsql';
 $lines[] = 'DB_HOST='.$quote($host);
 $lines[] = 'DB_PORT='.$quote($port);
@@ -77,3 +98,4 @@ $lines[] = 'LOG_CHANNEL=stderr';
 file_put_contents($envPath, implode("\n", $lines)."\n");
 
 fwrite(STDERR, "PostgreSQL hote={$host} base={$db} ssl={$ssl}\n");
+fwrite(STDERR, "APP_KEY initialisee (".strlen($appKey)." car.).\n");

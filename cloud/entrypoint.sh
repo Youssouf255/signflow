@@ -49,8 +49,9 @@ export MAIL_MAILER=log
 export DB_CONNECTION=pgsql
 export DB_SSLMODE="${DB_SSLMODE:-require}"
 
-if [ -z "${APP_KEY:-}" ]; then
-  export APP_KEY="$(php artisan key:generate --show --no-interaction)"
+if [ -z "${APP_KEY:-}" ] || [ "${APP_KEY}" = "base64:" ]; then
+  echo "APP_KEY manquant dans .env apres initialisation."
+  exit 1
 fi
 
 php artisan migrate --force --no-interaction
