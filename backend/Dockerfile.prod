@@ -1,0 +1,37 @@
+FROM php:8.3-cli-bookworm
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        $PHPIZE_DEPS \
+        git unzip curl \
+        libpng-dev libjpeg62-turbo-dev libfreetype6-dev \
+        libpq-dev libicu-dev libzip-dev libonig-dev \
+        libreoffice-writer libreoffice-calc \
+        fonts-dejavu-core \
+    && docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-install -j$(nproc) pdo pdo_pgsql mbstring exif pcntl bcmath gd intl zip \
+    && pecl install redis \
+    && docker-php-ext-enable redis \
+    && apt-get purge -y --auto-remove $PHPIZE_DEPS \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+
+WORKDIR /var/www/html
+
+COPY composer.json composer.lock ./
+RUN composer install --no-dev --no-scripts --prefer-dist --no-interaction --optimize-autoloader
+
+COPY . .
+RUN composer install --no-dev --prefer-dist --no-interaction --optimize-autoloader \
+    && mkdir -p storage/framework/cache storage/framework/sessions storage/framework/views storage/logs bootstrap/cache storage/app/documents \
+    && chown -R www-data:www-data storage bootstrap/cache
+
+COPY docker/php-prod.ini /usr/local/etc/php/conf.d/signflow.ini
+COPY docker/entrypoint.prod.sh /entrypoint.prod.sh
+RUN sed -i 's/\r$//' /entrypoint.prod.sh && chmod +x /entrypoint.prod.sh
+
+ENV LIBREOFFICE_PATH=/usr/bin/soffice
+
+EXPOSE 8000
+ENTRYPOINT ["/entrypoint.prod.sh"]
+CMD ["php", "artisan", "serve", "--host=0.0.0.0", "--port=8000"]

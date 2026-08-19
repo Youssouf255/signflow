@@ -1,0 +1,105 @@
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - signflow
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    env_file:
+      - .env.production
+    environment:
+      APP_ENV: production
+      APP_DEBUG: "false"
+      DB_CONNECTION: pgsql
+      DB_HOST: postgres
+      DB_PORT: 5432
+      REDIS_HOST: redis
+      CACHE_STORE: redis
+      QUEUE_CONNECTION: redis
+      SESSION_DRIVER: redis
+      FILESYSTEM_DISK: local
+      MAIL_MAILER: log
+      LIBREOFFICE_PATH: /usr/bin/soffice
+      RUN_SEED: "true"
+    volumes:
+      - storage_data:/var/www/html/storage/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - signflow
+
+  queue:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    command: php artisan queue:work redis --sleep=1 --tries=3 --timeout=180
+    env_file:
+      - .env.production
+    environment:
+      APP_ENV: production
+      APP_DEBUG: "false"
+      DB_CONNECTION: pgsql
+      DB_HOST: postgres
+      DB_PORT: 5432
+      REDIS_HOST: redis
+      CACHE_STORE: redis
+      QUEUE_CONNECTION: redis
+      SESSION_DRIVER: redis
+      FILESYSTEM_DISK: local
+      MAIL_MAILER: log
+      LIBREOFFICE_PATH: /usr/bin/soffice
+      RUN_SEED: "false"
+    volumes:
+      - storage_data:/var/www/html/storage/app
+    depends_on:
+      - backend
+      - redis
+    restart: unless-stopped
+    networks:
+      - signflow
+
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: ${DB_DATABASE:-signflow}
+      POSTGRES_USER: ${DB_USERNAME:-signflow}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-signflow}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-signflow} -d ${DB_DATABASE:-signflow}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    networks:
+      - signflow
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    networks:
+      - signflow
+
+volumes:
+  postgres_data:
+  storage_data:
+
+networks:
+  signflow:
+    driver: bridge

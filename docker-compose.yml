@@ -1,0 +1,179 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/var/www/html
+      - backend_vendor:/var/www/html/vendor
+    environment:
+      APP_NAME: SignFlow
+      APP_ENV: local
+      APP_DEBUG: "true"
+      APP_URL: http://localhost:8000
+      APP_KEY: base64:c2lnbmZsb3dtbnBrZXlmb3JkZXZlbG9wbWVudDEyMw==
+      FRONTEND_URL: http://localhost:4200
+      DB_CONNECTION: pgsql
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_DATABASE: signflow
+      DB_USERNAME: signflow
+      DB_PASSWORD: signflow
+      CACHE_STORE: redis
+      QUEUE_CONNECTION: redis
+      SESSION_DRIVER: redis
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      FILESYSTEM_DISK: s3
+      AWS_ACCESS_KEY_ID: minio
+      AWS_SECRET_ACCESS_KEY: minio12345
+      AWS_DEFAULT_REGION: us-east-1
+      AWS_BUCKET: signflow
+      AWS_ENDPOINT: http://minio:9000
+      AWS_USE_PATH_STYLE_ENDPOINT: "true"
+      AWS_URL: http://localhost:9000/signflow
+      MAIL_MAILER: smtp
+      MAIL_HOST: mailhog
+      MAIL_PORT: 1025
+      MAIL_FROM_ADDRESS: noreply@signflow.local
+      MAIL_FROM_NAME: SignFlow
+      SANCTUM_STATEFUL_DOMAINS: localhost,localhost:4200,localhost:8000,127.0.0.1,127.0.0.1:4200
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      minio:
+        condition: service_started
+      mailhog:
+        condition: service_started
+    networks:
+      - signflow
+
+  queue:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: php artisan queue:work redis --sleep=1 --tries=3 --timeout=120
+    volumes:
+      - ./backend:/var/www/html
+      - backend_vendor:/var/www/html/vendor
+    environment:
+      APP_NAME: SignFlow
+      APP_ENV: local
+      APP_DEBUG: "true"
+      APP_URL: http://localhost:8000
+      APP_KEY: base64:c2lnbmZsb3dtbnBrZXlmb3JkZXZlbG9wbWVudDEyMw==
+      FRONTEND_URL: http://localhost:4200
+      DB_CONNECTION: pgsql
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_DATABASE: signflow
+      DB_USERNAME: signflow
+      DB_PASSWORD: signflow
+      CACHE_STORE: redis
+      QUEUE_CONNECTION: redis
+      SESSION_DRIVER: redis
+      REDIS_HOST: redis
+      FILESYSTEM_DISK: s3
+      AWS_ACCESS_KEY_ID: minio
+      AWS_SECRET_ACCESS_KEY: minio12345
+      AWS_DEFAULT_REGION: us-east-1
+      AWS_BUCKET: signflow
+      AWS_ENDPOINT: http://minio:9000
+      AWS_USE_PATH_STYLE_ENDPOINT: "true"
+      MAIL_MAILER: smtp
+      MAIL_HOST: mailhog
+      MAIL_PORT: 1025
+      MAIL_FROM_ADDRESS: noreply@signflow.local
+      MAIL_FROM_NAME: SignFlow
+    depends_on:
+      - backend
+      - redis
+    networks:
+      - signflow
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "4200:4200"
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+    networks:
+      - signflow
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: signflow
+      POSTGRES_USER: signflow
+      POSTGRES_PASSWORD: signflow
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U signflow -d signflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - signflow
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    networks:
+      - signflow
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: minio12345
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    networks:
+      - signflow
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      sleep 3;
+      mc alias set local http://minio:9000 minio minio12345;
+      mc mb -p local/signflow || true;
+      exit 0;
+      "
+    networks:
+      - signflow
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    networks:
+      - signflow
+
+volumes:
+  postgres_data:
+  minio_data:
+  backend_vendor:
+  frontend_node_modules:
+
+networks:
+  signflow:
+    driver: bridge
