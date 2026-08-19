@@ -166,6 +166,9 @@ class SigningService
                 ->whereNotIn('status', ['signed', 'approved'])
                 ->count();
 
+            $notifyCompleted = false;
+            $notifyNext = false;
+
             if ($remaining === 0) {
                 $this->pdf->generateCertificate($document->fresh(['signers.signature', 'auditLogs']));
                 $document->update([
@@ -175,9 +178,23 @@ class SigningService
                 $this->audit->log($document, 'document.finalized', $request, null, $signer, [
                     'hash' => $hash,
                 ]);
+                $notifyCompleted = true;
             } else {
-                $this->documents->notifyNextSigners($document->fresh('signers'), $request);
+                $notifyNext = true;
             }
+
+            $documentId = $document->id;
+            DB::afterCommit(function () use ($documentId, $notifyCompleted, $notifyNext, $request) {
+                $fresh = Document::with(['signers', 'owner'])->find($documentId);
+                if (! $fresh) {
+                    return;
+                }
+                if ($notifyCompleted) {
+                    $this->documents->notifyDocumentCompleted($fresh, $request);
+                } elseif ($notifyNext) {
+                    $this->documents->notifyNextSigners($fresh, $request);
+                }
+            });
 
             return $document->fresh(['signers', 'fields', 'signatures', 'auditLogs']);
         });

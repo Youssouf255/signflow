@@ -47,6 +47,28 @@ if ($sanctumHost === '' && $appUrl !== '') {
     $sanctumHost = (string) (parse_url($appUrl, PHP_URL_HOST) ?: '');
 }
 
+$clean = static function (?string $value): string {
+    $value = trim((string) $value);
+    if ($value === '' || strcasecmp($value, 'null') === 0) {
+        return '';
+    }
+    return $value;
+};
+
+$mailUser = $clean(getenv('MAIL_USERNAME') ?: '');
+$mailPass = str_replace(' ', '', $clean(getenv('MAIL_PASSWORD') ?: ''));
+$mailHost = $clean(getenv('MAIL_HOST') ?: '');
+$mailPort = $clean(getenv('MAIL_PORT') ?: '587');
+$mailEncryption = $clean(getenv('MAIL_ENCRYPTION') ?: 'tls');
+$mailFrom = $clean(getenv('MAIL_FROM_ADDRESS') ?: $mailUser);
+$mailFromName = $clean(getenv('MAIL_FROM_NAME') ?: 'SignFlow');
+$mailer = $clean(getenv('MAIL_MAILER') ?: '');
+if ($mailUser !== '' && $mailPass !== '' && $mailHost !== '') {
+    $mailer = $mailer === '' || $mailer === 'log' ? 'smtp' : $mailer;
+} else {
+    $mailer = 'log';
+}
+
 $envPath = '.env';
 $env = is_file($envPath) ? (string) file_get_contents($envPath) : '';
 $keys = [
@@ -54,7 +76,9 @@ $keys = [
     'DB_CONNECTION', 'DB_HOST', 'DB_PORT', 'DB_DATABASE', 'DB_USERNAME', 'DB_PASSWORD',
     'DB_URL', 'DATABASE_URL', 'DB_SSLMODE',
     'SESSION_DRIVER', 'QUEUE_CONNECTION', 'CACHE_STORE', 'CACHE_DRIVER',
-    'FILESYSTEM_DISK', 'MAIL_MAILER', 'LOG_CHANNEL', 'REDIS_CLIENT',
+    'FILESYSTEM_DISK', 'MAIL_MAILER', 'MAIL_HOST', 'MAIL_PORT', 'MAIL_USERNAME',
+    'MAIL_PASSWORD', 'MAIL_ENCRYPTION', 'MAIL_FROM_ADDRESS', 'MAIL_FROM_NAME',
+    'LOG_CHANNEL', 'REDIS_CLIENT',
 ];
 $lines = preg_split("/\r\n|\n|\r/", $env) ?: [];
 $lines = array_values(array_filter($lines, static function (string $line) use ($keys): bool {
@@ -92,10 +116,21 @@ $lines[] = 'QUEUE_CONNECTION=sync';
 $lines[] = 'CACHE_STORE=file';
 $lines[] = 'CACHE_DRIVER=file';
 $lines[] = 'FILESYSTEM_DISK=local';
-$lines[] = 'MAIL_MAILER=log';
+$lines[] = 'MAIL_MAILER='.$quote($mailer);
+$lines[] = 'MAIL_HOST='.$quote($mailHost !== '' ? $mailHost : '127.0.0.1');
+$lines[] = 'MAIL_PORT='.$quote($mailPort !== '' ? $mailPort : '587');
+$lines[] = 'MAIL_USERNAME='.$quote($mailUser);
+$lines[] = 'MAIL_PASSWORD='.$quote($mailPass);
+$lines[] = 'MAIL_ENCRYPTION='.$quote($mailEncryption !== '' ? $mailEncryption : 'tls');
+$lines[] = 'MAIL_FROM_ADDRESS='.$quote($mailFrom !== '' ? $mailFrom : 'noreply@signflow.local');
+$lines[] = 'MAIL_FROM_NAME='.$quote($mailFromName !== '' ? $mailFromName : 'SignFlow');
 $lines[] = 'LOG_CHANNEL=stderr';
 
 file_put_contents($envPath, implode("\n", $lines)."\n");
 
 fwrite(STDERR, "PostgreSQL hote={$host} base={$db} ssl={$ssl}\n");
 fwrite(STDERR, "APP_KEY initialisee (".strlen($appKey)." car.).\n");
+fwrite(STDERR, $mailer === 'smtp'
+    ? "SMTP actif host={$mailHost} port={$mailPort} user={$mailUser}\n"
+    : "Mails en mode log (ajoutez MAIL_USERNAME et MAIL_PASSWORD sur Render pour SMTP).\n"
+);

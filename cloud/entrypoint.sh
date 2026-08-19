@@ -45,7 +45,6 @@ export FILESYSTEM_DISK=local
 export QUEUE_CONNECTION=sync
 export CACHE_STORE=file
 export SESSION_DRIVER=file
-export MAIL_MAILER=log
 export DB_CONNECTION=pgsql
 export DB_SSLMODE="${DB_SSLMODE:-require}"
 

@@ -18,6 +18,7 @@
         le document <strong>{{ $document->title }}</strong>
         ({{ $document->reference }}).
     </p>
+    <p>Cliquez sur le bouton ci-dessous pour ouvrir le document et effectuer votre action.</p>
     @if($document->expires_at)
         <p>Date d'expiration : <strong>{{ $document->expires_at->format('d/m/Y H:i') }}</strong></p>
     @endif

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Mail\DocumentCompletedMail;
 use App\Mail\SigningInvitationMail;
 use App\Models\Document;
 use App\Models\Signer;
@@ -9,6 +10,7 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -217,36 +219,122 @@ class DocumentService
             ->whereIn('status', ['pending', 'notified'])
             ->get();
 
-        $base = rtrim((string) ($request?->getSchemeAndHttpHost() ?: config('app.frontend_url')), '/');
+        $base = $this->publicBaseUrl();
 
         foreach ($targets as $signer) {
             $link = $base.'/sign/'.$signer->access_token;
-            Mail::to($signer->email)->send(new SigningInvitationMail($document, $signer, $link));
-
+            $this->deliverMail($signer->email, new SigningInvitationMail($document, $signer, $link), $document, $request, $signer);
             $signer->update([
                 'status' => 'notified',
                 'notified_at' => now(),
             ]);
-
-            $this->audit->log($document, 'email.delivered', $request, null, $signer, [
-                'email' => $signer->email,
-            ]);
         }
 
-        // Observers are notified once at send time
         if ($document->status === 'sent') {
             foreach ($document->signers()->where('role', 'observer')->get() as $observer) {
                 $link = $base.'/sign/'.$observer->access_token;
-                Mail::to($observer->email)->send(new SigningInvitationMail($document, $observer, $link));
-                $this->audit->log($document, 'email.delivered', $request, null, $observer, [
-                    'email' => $observer->email,
-                    'role' => 'observer',
-                ]);
+                $this->deliverMail(
+                    $observer->email,
+                    new SigningInvitationMail($document, $observer, $link),
+                    $document,
+                    $request,
+                    $observer
+                );
             }
         }
 
         if ($document->status === 'sent') {
             $document->update(['status' => 'in_progress']);
+        }
+    }
+
+    public function notifyDocumentCompleted(Document $document, ?Request $request = null): void
+    {
+        $document->loadMissing(['signers', 'owner']);
+        $absolute = $this->payloads->absolutePath($document);
+
+        if (! $absolute || ! is_file($absolute)) {
+            Log::error('PDF final introuvable pour l\'envoi aux signataires.', [
+                'document_id' => $document->id,
+            ]);
+
+            return;
+        }
+
+        $filename = ($document->reference ?: 'document').'-signe.pdf';
+        $sent = [];
+
+        foreach ($document->signers as $signer) {
+            $email = strtolower(trim((string) $signer->email));
+            if ($email === '' || isset($sent[$email])) {
+                continue;
+            }
+
+            $ok = $this->deliverMail(
+                $signer->email,
+                new DocumentCompletedMail($document, $signer->first_name ?: $signer->full_name, $absolute, $filename),
+                $document,
+                $request,
+                $signer
+            );
+
+            if ($ok) {
+                $sent[$email] = true;
+            }
+        }
+
+        $ownerEmail = strtolower(trim((string) ($document->owner?->email ?? '')));
+        if ($ownerEmail !== '' && ! isset($sent[$ownerEmail])) {
+            $this->deliverMail(
+                $document->owner->email,
+                new DocumentCompletedMail($document, $document->owner->name ?: 'destinataire', $absolute, $filename),
+                $document,
+                $request
+            );
+        }
+    }
+
+    private function publicBaseUrl(): string
+    {
+        $frontend = rtrim((string) config('app.frontend_url'), '/');
+        if ($frontend !== '') {
+            return $frontend;
+        }
+
+        return rtrim((string) config('app.url'), '/');
+    }
+
+    private function deliverMail(
+        string $email,
+        object $mailable,
+        Document $document,
+        ?Request $request = null,
+        ?Signer $signer = null
+    ): bool {
+        $email = trim($email);
+        if ($email === '') {
+            return false;
+        }
+
+        try {
+            Mail::to($email)->send($mailable);
+            $this->audit->log($document, 'email.delivered', $request, null, $signer, [
+                'email' => $email,
+                'mailer' => config('mail.default'),
+            ]);
+
+            return true;
+        } catch (\Throwable $e) {
+            Log::error('Echec envoi email SignFlow : '.$e->getMessage(), [
+                'email' => $email,
+                'document_id' => $document->id,
+            ]);
+            $this->audit->log($document, 'email.failed', $request, null, $signer, [
+                'email' => $email,
+                'error' => $e->getMessage(),
+            ]);
+
+            return false;
         }
     }
 }

@@ -21,12 +21,12 @@ class DocumentPayloadStore
         ])->save();
     }
 
-    public function ensureLocal(Document $document): string
+    public function restoreToDisk(Document $document): ?string
     {
         $path = $document->signed_file ?: $document->original_file;
         $disk = Storage::disk('local');
 
-        if ($path && $disk->exists($path)) {
+        if ($path && $disk->exists($path) && $disk->size($path) > 32) {
             return $path;
         }
 
@@ -34,14 +34,33 @@ class DocumentPayloadStore
             ? $document->signed_payload
             : $document->original_payload;
 
-        if ($path && $payload) {
-            $disk->put($path, base64_decode($payload, true) ?: '');
-            abort_unless($disk->exists($path) && $disk->size($path) > 32, 404, 'Fichier PDF introuvable.');
-
-            return $path;
+        if (! $path || ! $payload) {
+            return null;
         }
 
-        abort(404, 'Fichier PDF introuvable. Creez un nouveau dossier et reuploadez le PDF.');
+        $bytes = base64_decode($payload, true) ?: '';
+        if (strlen($bytes) < 32) {
+            return null;
+        }
+
+        $disk->put($path, $bytes);
+
+        return $disk->exists($path) ? $path : null;
+    }
+
+    public function ensureLocal(Document $document): string
+    {
+        $path = $this->restoreToDisk($document);
+        abort_unless((bool) $path, 404, 'Fichier PDF introuvable. Creez un nouveau dossier et reuploadez le PDF.');
+
+        return $path;
+    }
+
+    public function absolutePath(Document $document): ?string
+    {
+        $path = $this->restoreToDisk($document);
+
+        return $path ? Storage::disk('local')->path($path) : null;
     }
 
     private function encode(string $path): string
