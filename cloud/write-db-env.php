@@ -37,7 +37,12 @@ $dbUrl = sprintf(
 
 $envPath = '.env';
 $env = is_file($envPath) ? (string) file_get_contents($envPath) : '';
-$keys = ['DB_CONNECTION', 'DB_HOST', 'DB_PORT', 'DB_DATABASE', 'DB_USERNAME', 'DB_PASSWORD', 'DB_URL', 'DATABASE_URL', 'DB_SSLMODE'];
+$keys = [
+    'DB_CONNECTION', 'DB_HOST', 'DB_PORT', 'DB_DATABASE', 'DB_USERNAME', 'DB_PASSWORD',
+    'DB_URL', 'DATABASE_URL', 'DB_SSLMODE',
+    'SESSION_DRIVER', 'QUEUE_CONNECTION', 'CACHE_STORE', 'CACHE_DRIVER',
+    'FILESYSTEM_DISK', 'MAIL_MAILER', 'LOG_CHANNEL', 'REDIS_CLIENT',
+];
 $lines = preg_split("/\r\n|\n|\r/", $env) ?: [];
 $lines = array_values(array_filter($lines, static function (string $line) use ($keys): bool {
     foreach ($keys as $key) {
@@ -61,6 +66,13 @@ $lines[] = 'DB_PASSWORD='.$quote($pass);
 $lines[] = 'DB_SSLMODE='.$quote($ssl);
 $lines[] = 'DB_URL='.$quote($dbUrl);
 $lines[] = 'DATABASE_URL='.$quote($url);
+$lines[] = 'SESSION_DRIVER=file';
+$lines[] = 'QUEUE_CONNECTION=sync';
+$lines[] = 'CACHE_STORE=file';
+$lines[] = 'CACHE_DRIVER=file';
+$lines[] = 'FILESYSTEM_DISK=local';
+$lines[] = 'MAIL_MAILER=log';
+$lines[] = 'LOG_CHANNEL=stderr';
 
 file_put_contents($envPath, implode("\n", $lines)."\n");
 
