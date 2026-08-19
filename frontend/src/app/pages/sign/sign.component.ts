@@ -5,10 +5,7 @@ import SignaturePad from 'signature_pad';
 import { DocumentService, SignatureField } from '../../core/services/document.service';
 import * as pdfjsLib from 'pdfjs-dist';
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-  'pdfjs-dist/build/pdf.worker.min.mjs',
-  import.meta.url
-).toString();
+pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
 
 @Component({
   selector: 'app-sign',
@@ -475,7 +472,12 @@ export class SignComponent implements OnInit, AfterViewInit {
       const res = await fetch(this.documents.publicFileUrl(this.token));
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const buffer = await res.arrayBuffer();
-      this.pdfDoc = await pdfjsLib.getDocument({ data: buffer }).promise;
+      const data = new Uint8Array(buffer);
+      try {
+        this.pdfDoc = await pdfjsLib.getDocument({ data }).promise;
+      } catch {
+        this.pdfDoc = await pdfjsLib.getDocument({ data, disableWorker: true }).promise;
+      }
       this.pageCount.set(this.pdfDoc.numPages);
       await this.render();
       this.pdfReady.set(true);

@@ -5,10 +5,7 @@ import { DocumentItem, DocumentService, SignatureField, Signer } from '../../cor
 import { AuthService } from '../../core/services/auth.service';
 import * as pdfjsLib from 'pdfjs-dist';
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-  'pdfjs-dist/build/pdf.worker.min.mjs',
-  import.meta.url
-).toString();
+pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
 
 type FieldType = SignatureField['type'];
 
@@ -549,16 +546,22 @@ export class DocumentEditorComponent implements OnInit {
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const buffer = await res.arrayBuffer();
-      this.pdfDoc = await pdfjsLib.getDocument({ data: buffer }).promise;
+      const data = new Uint8Array(buffer);
+      try {
+        this.pdfDoc = await pdfjsLib.getDocument({ data }).promise;
+      } catch {
+        this.pdfDoc = await pdfjsLib.getDocument({ data, disableWorker: true }).promise;
+      }
       this.pageCount.set(this.pdfDoc.numPages);
       this.page.set(1);
       await this.renderPage();
       this.pdfReady.set(true);
       this.pdfMessage.set('');
       this.status.set('PDF prêt. Glissez un champ depuis la gauche.');
-    } catch {
+    } catch (err) {
       this.pdfReady.set(false);
-      this.pdfMessage.set('Échec du chargement PDF.');
+      const detail = err instanceof Error ? err.message : '';
+      this.pdfMessage.set(detail ? `Échec du chargement PDF (${detail}).` : 'Échec du chargement PDF.');
       this.error.set("Impossible d'afficher le PDF.");
     }
   }
