@@ -561,6 +561,7 @@ export class DocumentEditorComponent implements OnInit {
         throw new Error('Réponse invalide (pas un PDF)');
       }
       const pdfjsLib = await import('pdfjs-dist');
+      pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
       this.pdfDoc = await pdfjsLib.getDocument({ data, disableWorker: true } as never).promise;
       this.pageCount.set(this.pdfDoc.numPages);
       this.page.set(1);
