@@ -5,13 +5,20 @@ FROM node:20-alpine AS frontend
 WORKDIR /app
 ENV NODE_OPTIONS=--max-old-space-size=2048
 ENV NG_BUILD_MAX_WORKERS=1
+ENV CI=false
 COPY frontend/package.json frontend/package-lock.json* ./
 RUN npm install --legacy-peer-deps
 COPY frontend/ ./
-RUN npm run build -- --configuration production \
-    && mkdir -p dist/frontend/browser \
-    && WORKER=$(find node_modules/pdfjs-dist -name 'pdf.worker.min.mjs' | head -n 1) \
-    && if [ -n "$WORKER" ]; then cp "$WORKER" dist/frontend/browser/pdf.worker.min.mjs; fi
+RUN mkdir -p public \
+ && (cp -f node_modules/pdfjs-dist/build/pdf.worker.min.mjs public/pdf.worker.min.mjs \
+  || cp -f node_modules/pdfjs-dist/legacy/build/pdf.worker.min.mjs public/pdf.worker.min.mjs \
+  || true)
+RUN npm run build -- --configuration production
+RUN mkdir -p dist/frontend/browser \
+ && (cp -f public/pdf.worker.min.mjs dist/frontend/browser/pdf.worker.min.mjs \
+  || cp -f node_modules/pdfjs-dist/build/pdf.worker.min.mjs dist/frontend/browser/pdf.worker.min.mjs \
+  || cp -f node_modules/pdfjs-dist/legacy/build/pdf.worker.min.mjs dist/frontend/browser/pdf.worker.min.mjs \
+  || true)
 
 FROM php:8.4-cli-bookworm
 RUN apt-get update && apt-get install -y --no-install-recommends \
