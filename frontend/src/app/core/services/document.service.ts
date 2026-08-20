@@ -30,6 +30,7 @@ export interface SignatureField {
 export interface MailInvitations {
   sent?: string[];
   failed?: string[];
+  to?: string[];
   mailer?: string;
   error?: string;
   queued?: boolean;

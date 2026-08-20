@@ -91,7 +91,7 @@ mkdir -p /var/www/html/storage/app/pending-mail
 (
   while true; do
     php artisan signflow:send-pending-mail || true
-    sleep 8
+    sleep 2
   done
 ) &
 

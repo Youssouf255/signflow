@@ -261,7 +261,7 @@ class DocumentService
         $ids = $targets->pluck('id')->map(fn ($id) => (int) $id)->values()->all();
 
         if ($ids === []) {
-            return ['queued' => false, 'sent' => [], 'failed' => [], 'signer_ids' => []];
+            return ['queued' => false, 'sent' => [], 'failed' => [], 'signer_ids' => [], 'to' => []];
         }
 
         if ($force) {
@@ -269,27 +269,24 @@ class DocumentService
             $targets = $document->signers()->whereIn('id', $ids)->get();
         }
 
-        @set_time_limit(60);
-        $result = $this->inviteSigners($document, $targets, $request);
-
-        if (($result['failed'] ?? []) !== []) {
-            $this->mailQueue->push([
-                'type' => 'invite',
-                'document_id' => $document->id,
-                'signer_ids' => $ids,
-            ]);
-        }
+        $this->mailQueue->push([
+            'type' => 'invite',
+            'document_id' => $document->id,
+            'signer_ids' => $ids,
+        ]);
 
         if ($document->status === 'sent') {
             $document->update(['status' => 'in_progress']);
         }
 
+        $emails = $targets->pluck('email')->filter()->values()->all();
+
         return [
-            'queued' => ($result['failed'] ?? []) !== [],
-            'sent' => $result['sent'] ?? [],
-            'failed' => $result['failed'] ?? [],
+            'queued' => true,
+            'sent' => [],
+            'failed' => [],
             'signer_ids' => $ids,
-            'error' => $result['error'] ?? null,
+            'to' => $emails,
         ];
     }
 

@@ -1,6 +1,7 @@
 import { DatePipe } from '@angular/common';
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { timeout } from 'rxjs';
 import { AuthService } from '../../core/services/auth.service';
 import { AuditLog, DocumentItem, DocumentService, SignatureField, Signer } from '../../core/services/document.service';
 
@@ -179,26 +180,32 @@ export class DocumentDetailComponent implements OnInit {
     this.resending.set(true);
     this.error.set('');
     this.info.set('');
-    this.documents.resendInvite(this.docId).subscribe({
+    this.documents.resendInvite(this.docId).pipe(timeout(12000)).subscribe({
       next: (doc) => {
         this.resending.set(false);
         this.doc.set(doc);
-        const sent = doc.invitations?.sent || [];
+        const to = doc.invitations?.to || doc.invitations?.sent || [];
         const failed = doc.invitations?.failed || [];
-        if (sent.length) {
-          this.info.set(
-            'Invitation renvoyée à ' + sent.join(', ') +
-            '. Demandez de vérifier la boîte de réception et les courriers indésirables (spam).'
-          );
-        } else if (failed.length) {
+        if (failed.length) {
           this.error.set('Échec d’envoi vers ' + failed.join(', ') + '. Nouvel essai automatique dans quelques secondes.');
         } else {
-          this.info.set('Nouvelle tentative d’invitation lancée' + (pending?.email ? ' pour ' + pending.email : '') + '.');
+          const email = to[0] || pending?.email || 'le signataire en cours';
+          this.info.set(
+            'L’invitation va partir dans quelques secondes vers ' + email +
+            '. Demandez de vérifier la boîte de réception et les courriers indésirables (spam Yahoo).'
+          );
         }
         this.reload();
       },
       error: (err) => {
         this.resending.set(false);
+        if (err?.name === 'TimeoutError' || err?.status === 0 || err?.status === 504) {
+          this.info.set(
+            'L’envoi continue en arrière-plan vers ' + (pending?.email || 'le signataire') +
+            '. Vérifiez la boîte de réception et le spam dans une minute.'
+          );
+          return;
+        }
         this.error.set(err?.error?.message || 'Impossible de renvoyer l’invitation');
       },
     });
