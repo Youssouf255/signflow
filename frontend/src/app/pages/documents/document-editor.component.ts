@@ -1,7 +1,9 @@
 import { Component, ElementRef, OnInit, ViewChild, inject, signal } from '@angular/core';
-import { FormArray, FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { FormArray, FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { DocumentItem, DocumentService, SignatureField, Signer } from '../../core/services/document.service';
+import { AddressContact } from '../../core/services/contact.service';
+import { EmailPickerComponent } from '../../core/ui/email-picker.component';
 import { AuthService } from '../../core/services/auth.service';
 
 type FieldType = SignatureField['type'];
@@ -9,7 +11,7 @@ type FieldType = SignatureField['type'];
 @Component({
   selector: 'app-document-editor',
   standalone: true,
-  imports: [ReactiveFormsModule, RouterLink],
+  imports: [ReactiveFormsModule, RouterLink, EmailPickerComponent],
   template: `
     <div class="editor">
       <aside class="left">
@@ -97,7 +99,7 @@ type FieldType = SignatureField['type'];
                 <div class="edit-card" [formGroupName]="i">
                   <label>Prénom<input formControlName="first_name" /></label>
                   <label>Nom<input formControlName="last_name" /></label>
-                  <label>Email<input type="email" formControlName="email" placeholder="ex.  nom@gmail.com" /></label>
+                  <label>Email<app-email-picker formControlName="email" (picked)="applyContact(i, $event)" /></label>
                 </div>
               }
             </div>
@@ -235,6 +237,15 @@ export class DocumentEditorComponent implements OnInit {
       return;
     }
     this.editingSigners.set(false);
+  }
+
+  applyContact(index: number, contact: AddressContact) {
+    const group = this.editSigners.at(index) as FormGroup;
+    group.patchValue({
+      email: contact.email,
+      first_name: contact.first_name || group.get('first_name')?.value,
+      last_name: contact.last_name || group.get('last_name')?.value,
+    });
   }
 
   saveSignerNames() {

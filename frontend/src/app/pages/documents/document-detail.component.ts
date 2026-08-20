@@ -73,7 +73,7 @@ import { AuditLog, DocumentItem, DocumentService, SignatureField, Signer } from 
               </div>
             }
             @if (smtpMissing()) {
-              <p class="mail-err">Gmail n’est pas configuré sur le serveur (MAIL_USERNAME / MAIL_PASSWORD). Les e-mails ne peuvent pas partir.</p>
+              <p class="mail-err">Aucun envoi HTTPS n’est configuré. Ajoutez SENDGRID_API_KEY dans Render &gt; Environment (Gmail SMTP est bloqué sur l’hébergeur gratuit).</p>
             }
             @if (mailError()) {
               <p class="mail-err">Dernière erreur e-mail : {{ mailError() }}</p>
@@ -188,11 +188,15 @@ export class DocumentDetailComponent implements OnInit {
 
   smtpMissing(): boolean {
     const status = this.doc()?.mail_status;
-    return !!status && status.smtp_ready === false;
+    return !!status && status.http_ready === false && status.smtp_ready === false;
   }
 
   mailError(): string {
-    return this.doc()?.mail_status?.last_error || '';
+    const raw = this.doc()?.mail_status?.last_error || '';
+    if (/timed out|Connection timed out|bloque Gmail SMTP/i.test(raw)) {
+      return 'Render bloque Gmail SMTP. Créez un compte SendGrid (vérification par e-mail), puis ajoutez SENDGRID_API_KEY dans Render > Environment.';
+    }
+    return raw;
   }
 
   mailDeliveredHint(): string {
@@ -200,8 +204,8 @@ export class DocumentDetailComponent implements OnInit {
     if (!status?.last_delivered_at || this.mailError()) {
       return '';
     }
-    const account = status.smtp_user || 'Gmail';
-    return 'Gmail a accepté un envoi. Vérifiez aussi le compte ' + account + ' (boîte Envoyés) et le spam Yahoo.';
+    const account = status.smtp_user || 'l’expéditeur SignFlow';
+    return 'Un e-mail a été accepté. Vérifiez aussi le spam Yahoo et la copie éventuelle sur ' + account + '.';
   }
 
   resendInvite() {

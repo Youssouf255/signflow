@@ -101,6 +101,8 @@ $keys = [
     'SESSION_DRIVER', 'QUEUE_CONNECTION', 'CACHE_STORE', 'CACHE_DRIVER',
     'FILESYSTEM_DISK', 'MAIL_MAILER', 'MAIL_HOST', 'MAIL_PORT', 'MAIL_USERNAME',
     'MAIL_PASSWORD', 'MAIL_ENCRYPTION', 'MAIL_SCHEME', 'MAIL_URL', 'MAIL_FROM_ADDRESS', 'MAIL_FROM_NAME', 'MAIL_EHLO_DOMAIN',
+    'BREVO_API_KEY', 'SENDINBLUE_API_KEY', 'SENDGRID_API_KEY', 'RESEND_API_KEY',
+    'MICROSOFT_CLIENT_ID', 'MICROSOFT_CLIENT_SECRET', 'MICROSOFT_TENANT_ID',
     'LOG_CHANNEL', 'REDIS_CLIENT',
 ];
 $lines = preg_split("/\r\n|\n|\r/", $env) ?: [];
@@ -157,6 +159,30 @@ if ($mailer === 'smtp' && $mailUser !== '' && $mailPass !== '') {
 }
 $lines[] = 'MAIL_FROM_ADDRESS='.$quote($mailFrom !== '' ? $mailFrom : 'noreply@signflow.local');
 $lines[] = 'MAIL_FROM_NAME='.$quote($mailFromName !== '' ? $mailFromName : 'SignFlow');
+$brevoKey = $envv('BREVO_API_KEY') ?: $envv('SENDINBLUE_API_KEY');
+$sendgridKey = $envv('SENDGRID_API_KEY');
+$resendKey = $envv('RESEND_API_KEY');
+if ($brevoKey !== '') {
+    $lines[] = 'BREVO_API_KEY='.$quote($brevoKey);
+}
+if ($sendgridKey !== '') {
+    $lines[] = 'SENDGRID_API_KEY='.$quote($sendgridKey);
+}
+if ($resendKey !== '') {
+    $lines[] = 'RESEND_API_KEY='.$quote($resendKey);
+}
+$msId = $envv('MICROSOFT_CLIENT_ID');
+$msSecret = $envv('MICROSOFT_CLIENT_SECRET');
+$msTenant = $envv('MICROSOFT_TENANT_ID');
+if ($msId !== '') {
+    $lines[] = 'MICROSOFT_CLIENT_ID='.$quote($msId);
+}
+if ($msSecret !== '') {
+    $lines[] = 'MICROSOFT_CLIENT_SECRET='.$quote($msSecret);
+}
+if ($msTenant !== '') {
+    $lines[] = 'MICROSOFT_TENANT_ID='.$quote($msTenant);
+}
 $lines[] = 'LOG_CHANNEL=stderr';
 
 file_put_contents($envPath, implode("\n", $lines)."\n");
@@ -167,3 +193,4 @@ fwrite(STDERR, $mailer === 'smtp'
     ? "SMTP actif host={$mailHost} port={$mailPort} user={$mailUser}\n"
     : "Mails en mode log. MAIL_USERNAME=".($mailUser !== '' ? 'oui' : 'ABSENT')." MAIL_PASSWORD=".($mailPass !== '' ? 'oui' : 'ABSENT')."\n"
 );
+fwrite(STDERR, 'HTTP mail Brevo='.($brevoKey !== '' ? 'oui' : 'non').' SendGrid='.($sendgridKey !== '' ? 'oui' : 'non').' Resend='.($resendKey !== '' ? 'oui' : 'non')."\n");

@@ -1,8 +1,10 @@
 <?php
 
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\ContactController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DocumentController;
+use App\Http\Controllers\MicrosoftAuthController;
 use App\Http\Controllers\SignerController;
 use App\Http\Controllers\SigningController;
 use Illuminate\Support\Facades\Route;
@@ -11,6 +13,8 @@ Route::prefix('auth')->group(function () {
     Route::post('register', [AuthController::class, 'register']);
     Route::post('login', [AuthController::class, 'login']);
 });
+
+Route::get('microsoft/callback', [MicrosoftAuthController::class, 'callback']);
 
 Route::prefix('sign')->group(function () {
     Route::get('{token}', [SigningController::class, 'show']);
@@ -26,6 +30,10 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('dashboard', DashboardController::class);
     Route::get('signers', [SignerController::class, 'index']);
+    Route::get('contacts', [ContactController::class, 'index']);
+    Route::get('microsoft/status', [MicrosoftAuthController::class, 'status']);
+    Route::get('microsoft/connect', [MicrosoftAuthController::class, 'connect']);
+    Route::delete('microsoft/disconnect', [MicrosoftAuthController::class, 'disconnect']);
 
     Route::get('documents', [DocumentController::class, 'index']);
     Route::post('documents', [DocumentController::class, 'store']);

@@ -2,16 +2,18 @@ import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormArray, FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { DocumentItem, DocumentService } from '../../core/services/document.service';
+import { AddressContact } from '../../core/services/contact.service';
+import { EmailPickerComponent } from '../../core/ui/email-picker.component';
 
 @Component({
   selector: 'app-document-signers',
   standalone: true,
-  imports: [ReactiveFormsModule, RouterLink],
+  imports: [ReactiveFormsModule, RouterLink, EmailPickerComponent],
   template: `
     <div class="page">
       <a class="back" [routerLink]="['/app/documents', docId]">← Retour au document</a>
       <h2>Ajouter les signataires</h2>
-      <p class="sub">Document : {{ doc()?.title || ('#' + docId) }}. Un e-mail d’invitation est envoyé dès qu’un signataire est enregistré (Gmail, Outlook, Yahoo, etc.).</p>
+      <p class="sub">Document : {{ doc()?.title || ('#' + docId) }}. Cliquez dans Email pour choisir un contact (SignFlow ou Outlook 365), ou saisissez une adresse.</p>
 
       @if (!ready()) {
         <p class="info">Chargement des signataires…</p>
@@ -29,7 +31,7 @@ import { DocumentItem, DocumentService } from '../../core/services/document.serv
                     <input formControlName="last_name" autocomplete="family-name" />
                   </label>
                   <label>Email
-                    <input type="email" formControlName="email" autocomplete="email" placeholder="gmail, outlook, yahoo…" />
+                    <app-email-picker formControlName="email" (picked)="applyContact(i, $event)" />
                   </label>
                   <label>Ordre
                     <input type="number" min="1" formControlName="signing_order" />
@@ -132,6 +134,15 @@ export class DocumentSignersComponent implements OnInit {
         this.error.set('Document introuvable.');
         this.ready.set(true);
       },
+    });
+  }
+
+  applyContact(index: number, contact: AddressContact) {
+    const group = this.signers.at(index) as FormGroup;
+    group.patchValue({
+      email: contact.email,
+      first_name: contact.first_name || group.get('first_name')?.value,
+      last_name: contact.last_name || group.get('last_name')?.value,
     });
   }
 

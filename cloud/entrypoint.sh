@@ -29,6 +29,12 @@ export DB_SSLMODE="${DB_SSLMODE:-require}"
 KEEP_MAIL_USER="${MAIL_USERNAME:-}"
 KEEP_MAIL_PASS="${MAIL_PASSWORD:-}"
 KEEP_MAIL_FROM="${MAIL_FROM_ADDRESS:-}"
+KEEP_BREVO="${BREVO_API_KEY:-${SENDINBLUE_API_KEY:-}}"
+KEEP_SENDGRID="${SENDGRID_API_KEY:-}"
+KEEP_RESEND="${RESEND_API_KEY:-}"
+KEEP_MS_ID="${MICROSOFT_CLIENT_ID:-}"
+KEEP_MS_SECRET="${MICROSOFT_CLIENT_SECRET:-}"
+KEEP_MS_TENANT="${MICROSOFT_TENANT_ID:-}"
 
 if [ -n "${DATABASE_URL:-}${DB_URL:-}" ]; then
   php /write-db-env.php
@@ -51,15 +57,35 @@ fi
 if [ -z "${MAIL_FROM_ADDRESS:-}" ] && [ -n "$KEEP_MAIL_FROM" ]; then
   export MAIL_FROM_ADDRESS="$KEEP_MAIL_FROM"
 fi
-if [ -n "${MAIL_USERNAME:-}" ] && [ -n "${MAIL_PASSWORD:-}" ]; then
+if [ -z "${BREVO_API_KEY:-}" ] && [ -n "$KEEP_BREVO" ]; then
+  export BREVO_API_KEY="$KEEP_BREVO"
+fi
+if [ -z "${SENDGRID_API_KEY:-}" ] && [ -n "$KEEP_SENDGRID" ]; then
+  export SENDGRID_API_KEY="$KEEP_SENDGRID"
+fi
+if [ -z "${RESEND_API_KEY:-}" ] && [ -n "$KEEP_RESEND" ]; then
+  export RESEND_API_KEY="$KEEP_RESEND"
+fi
+if [ -z "${MICROSOFT_CLIENT_ID:-}" ] && [ -n "$KEEP_MS_ID" ]; then
+  export MICROSOFT_CLIENT_ID="$KEEP_MS_ID"
+fi
+if [ -z "${MICROSOFT_CLIENT_SECRET:-}" ] && [ -n "$KEEP_MS_SECRET" ]; then
+  export MICROSOFT_CLIENT_SECRET="$KEEP_MS_SECRET"
+fi
+if [ -z "${MICROSOFT_TENANT_ID:-}" ] && [ -n "$KEEP_MS_TENANT" ]; then
+  export MICROSOFT_TENANT_ID="$KEEP_MS_TENANT"
+fi
+if [ -n "${BREVO_API_KEY:-}${SENDGRID_API_KEY:-}${RESEND_API_KEY:-}" ]; then
+  echo "HTTP mail pret (Brevo/SendGrid/Resend)"
+elif [ -n "${MAIL_USERNAME:-}" ] && [ -n "${MAIL_PASSWORD:-}" ]; then
   export MAIL_MAILER=smtp
   export MAIL_HOST="${MAIL_HOST:-smtp.gmail.com}"
   export MAIL_PORT="${MAIL_PORT:-587}"
   export MAIL_ENCRYPTION="${MAIL_ENCRYPTION:-tls}"
   export MAIL_FROM_ADDRESS="${MAIL_FROM_ADDRESS:-$MAIL_USERNAME}"
-  echo "SMTP pret pour ${MAIL_USERNAME}"
+  echo "SMTP pret pour ${MAIL_USERNAME} (souvent bloque sur Render)"
 else
-  echo "SMTP inactif : MAIL_USERNAME ou MAIL_PASSWORD manquant dans Render > Environment."
+  echo "Aucun envoi mail configure : ajoutez SENDGRID_API_KEY dans Render > Environment."
 fi
 
 export APP_ENV=production

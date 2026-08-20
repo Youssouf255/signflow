@@ -460,6 +460,7 @@ class DocumentService
 
         return [
             'smtp_ready' => $this->gmail->hasCredentials(),
+            'http_ready' => $this->gmail->hasHttpMailer(),
             'smtp_user' => $this->gmail->username() ?: null,
             'pending' => $pending,
             'last_error' => data_get($pending, '0.last_error') ?: data_get($lastFail, 'metadata.error'),

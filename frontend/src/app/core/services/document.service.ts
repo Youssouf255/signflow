@@ -54,6 +54,7 @@ export interface DocumentItem {
   invitations?: MailInvitations;
   mail_status?: {
     smtp_ready?: boolean;
+    http_ready?: boolean;
     smtp_user?: string | null;
     last_error?: string | null;
     last_delivered_at?: string | null;

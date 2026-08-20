@@ -46,6 +46,18 @@ services:
         sync: false
       - key: MAIL_FROM_ADDRESS
         sync: false
+      - key: BREVO_API_KEY
+        sync: false
+      - key: SENDGRID_API_KEY
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: MICROSOFT_CLIENT_ID
+        sync: false
+      - key: MICROSOFT_CLIENT_SECRET
+        sync: false
+      - key: MICROSOFT_TENANT_ID
+        sync: false
       - key: RUN_SEED
         value: "true"
       - key: DB_CONNECTION

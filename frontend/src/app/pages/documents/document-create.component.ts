@@ -1,13 +1,15 @@
 import { Component, inject, signal } from '@angular/core';
-import { FormArray, FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { FormArray, FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { timeout } from 'rxjs';
 import { DocumentService } from '../../core/services/document.service';
+import { AddressContact } from '../../core/services/contact.service';
+import { EmailPickerComponent } from '../../core/ui/email-picker.component';
 
 @Component({
   selector: 'app-document-create',
   standalone: true,
-  imports: [ReactiveFormsModule],
+  imports: [ReactiveFormsModule, EmailPickerComponent],
   template: `
     <div class="page">
       <h2>Créer un dossier</h2>
@@ -47,7 +49,7 @@ import { DocumentService } from '../../core/services/document.service';
                 <div class="grid">
                   <label>Prénom<input formControlName="first_name" /></label>
                   <label>Nom<input formControlName="last_name" /></label>
-                  <label>Email<input type="email" formControlName="email" placeholder="gmail, outlook, yahoo…" /></label>
+                  <label>Email<app-email-picker formControlName="email" (picked)="applyContact(i, $event)" /></label>
                   <label>Ordre<input type="number" min="1" formControlName="signing_order" /></label>
                   <label>Rôle
                     <select formControlName="role">
@@ -189,6 +191,15 @@ export class DocumentCreateComponent {
         this.loading.set(false);
         this.error.set(this.formatApiError(err));
       },
+    });
+  }
+
+  applyContact(index: number, contact: AddressContact) {
+    const group = this.signers.at(index) as FormGroup;
+    group.patchValue({
+      email: contact.email,
+      first_name: contact.first_name || group.get('first_name')?.value,
+      last_name: contact.last_name || group.get('last_name')?.value,
     });
   }
 
