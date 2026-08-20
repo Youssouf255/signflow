@@ -177,23 +177,9 @@ export class DocumentSignersComponent implements OnInit {
     this.info.set('Enregistrement en cours…');
 
     this.documents.syncSigners(this.docId, payload).subscribe({
-      next: (doc) => {
+      next: () => {
         this.loading.set(false);
-        const sent = doc.invitations?.sent || [];
-        const failed = doc.invitations?.failed || [];
-        if (sent.length) {
-          this.info.set('Invitation envoyée à ' + sent.join(', ') + '.');
-        } else {
-          this.info.set('Signataires enregistrés.');
-        }
-        if (failed.length) {
-          this.error.set(
-            'E-mail non envoyé (' +
-              failed.join(', ') +
-              '). ' +
-              (doc.invitations?.error || 'Vérifiez MAIL_PASSWORD (mot de passe d’application Gmail).')
-          );
-        }
+        this.info.set('Signataires enregistrés. Les e-mails partent dans quelques secondes.');
         void this.router.navigate(['/app/documents', this.docId, 'editor']);
       },
       error: (err) => {
@@ -211,7 +197,7 @@ export class DocumentSignersComponent implements OnInit {
         const status = err?.status;
         if (status === 0 || status === 502 || status === 504) {
           this.error.set(
-            'Le serveur a mis trop de temps (souvent SMTP). Rechargez la page : les signataires sont peut-être déjà enregistrés. Puis redéployez le dernier commit.'
+            'La page a mis trop de temps, mais les signataires sont souvent déjà enregistrés. Rechargez, puis ouvrez l’éditeur. Les e-mails partent en arrière-plan.'
           );
           return;
         }

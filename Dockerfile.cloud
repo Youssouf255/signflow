@@ -28,7 +28,7 @@ RUN composer install --no-dev --no-scripts --prefer-dist --no-interaction --opti
 
 COPY backend/ ./
 RUN composer install --no-dev --prefer-dist --no-interaction --optimize-autoloader \
-    && mkdir -p storage/framework/cache storage/framework/sessions storage/framework/views storage/logs bootstrap/cache storage/app/documents \
+    && mkdir -p storage/framework/cache storage/framework/sessions storage/framework/views storage/logs bootstrap/cache storage/app/documents storage/app/pending-mail \
     && chown -R www-data:www-data storage bootstrap/cache
 
 COPY backend/docker/php-prod.ini /usr/local/etc/php/conf.d/signflow.ini

@@ -190,7 +190,7 @@ class SigningService
                     return;
                 }
                 if ($notifyCompleted) {
-                    $this->documents->notifyDocumentCompleted($fresh, $request);
+                    $this->documents->queueCompletedMail($fresh);
                 } elseif ($notifyNext) {
                     $this->documents->notifyNextSigners($fresh, $request);
                 }

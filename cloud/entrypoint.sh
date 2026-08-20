@@ -87,6 +87,14 @@ php artisan storage:link --force --no-interaction || true
 
 php artisan serve --host=127.0.0.1 --port=8000 &
 
+mkdir -p /var/www/html/storage/app/pending-mail
+(
+  while true; do
+    php artisan signflow:send-pending-mail || true
+    sleep 5
+  done
+) &
+
 export PORT="${PORT:-10000}"
 envsubst '${PORT}' < /etc/nginx/templates/signflow.conf.template > /etc/nginx/conf.d/signflow.conf
 rm -f /etc/nginx/sites-enabled/default

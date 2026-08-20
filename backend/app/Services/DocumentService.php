@@ -21,7 +21,8 @@ class DocumentService
         private PdfService $pdf,
         private DocumentConversionService $conversion,
         private DocumentPayloadStore $payloads,
-        private GmailSmtpSender $gmail
+        private GmailSmtpSender $gmail,
+        private PendingMailQueue $mailQueue
     ) {}
 
     public function create(User $owner, array $data, UploadedFile $file, Request $request): Document
@@ -106,12 +107,16 @@ class DocumentService
             return $document->fresh(['signers', 'fields']);
         });
 
-        @set_time_limit(90);
-        $toInvite = $document->signers->filter(
-            fn (Signer $signer) => in_array((int) $signer->id, array_map('intval', $newSignerIds), true)
-        );
-        $invitations = $this->inviteSigners($document, $toInvite, $request);
-        $document->setAttribute('invitations', $invitations);
+        $this->mailQueue->push([
+            'type' => 'invite',
+            'document_id' => $document->id,
+            'signer_ids' => array_values(array_map('intval', $newSignerIds)),
+        ]);
+        $document->setAttribute('invitations', [
+            'queued' => true,
+            'sent' => [],
+            'failed' => [],
+        ]);
 
         return $document;
     }
@@ -237,18 +242,33 @@ class DocumentService
 
     public function notifyNextSigners(Document $document, ?Request $request = null): array
     {
-        $targets = $document->signers()
+        $ids = $document->signers()
             ->whereNotIn('status', ['signed', 'approved', 'declined'])
             ->whereNull('notified_at')
-            ->get();
+            ->pluck('id')
+            ->all();
 
-        $invitations = $this->inviteSigners($document, $targets, $request);
+        $this->mailQueue->push([
+            'type' => 'invite',
+            'document_id' => $document->id,
+            'signer_ids' => array_values(array_map('intval', $ids)),
+        ]);
 
         if ($document->status === 'sent') {
             $document->update(['status' => 'in_progress']);
         }
 
-        return $invitations;
+        return [
+            'queued' => true,
+        ];
+    }
+
+    public function queueCompletedMail(Document $document): void
+    {
+        $this->mailQueue->push([
+            'type' => 'completed',
+            'document_id' => $document->id,
+        ]);
     }
 
     public function notifyDocumentCompleted(Document $document, ?Request $request = null): void
