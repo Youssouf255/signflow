@@ -50,7 +50,7 @@ import { DocumentItem, DocumentService } from '../../core/services/document.serv
           </div>
 
           @if (error()) { <p class="error">{{ error() }}</p> }
-          @if (info()) { <p class="info">{{ info() }}</p> }
+          @if (info()) { <p class="info">{{ info() }} <a [routerLink]="['/app/documents', docId, 'editor']">Ouvrir l’éditeur</a></p> }
 
           <div class="actions">
             <button type="button" class="ghost" (click)="addSigner()">+ Ajouter un signataire</button>
@@ -106,6 +106,7 @@ export class DocumentSignersComponent implements OnInit {
 
   ngOnInit(): void {
     this.docId = Number(this.route.snapshot.paramMap.get('id'));
+    void import('./document-editor.component');
     this.documents.get(this.docId).subscribe({
       next: (doc) => {
         this.doc.set(doc);
@@ -176,31 +177,10 @@ export class DocumentSignersComponent implements OnInit {
     this.info.set('Enregistrement en cours…');
 
     this.documents.syncSigners(this.docId, payload).subscribe({
-      next: (doc) => {
+      next: () => {
         this.loading.set(false);
-        const queued = !!doc.invitations?.queued;
-        const sent = doc.invitations?.sent || [];
-        const failed = doc.invitations?.failed || [];
-        if (failed.length && !sent.length && !queued) {
-          this.error.set(
-            'Signataires enregistrés. Échec Gmail : ' +
-              (doc.invitations?.error || 'connexion SMTP refusée') +
-              ' — destinataires : ' +
-              failed.join(', ')
-          );
-          return;
-        }
-        this.info.set(
-          queued
-            ? 'Signataires enregistrés. Invitations en cours d’envoi… Ouverture de l’éditeur…'
-            : (sent.length ? 'Invitation envoyée à ' + sent.join(', ') + '.' : 'Signataires enregistrés.') +
-              " Ouverture de l'éditeur…"
-        );
-        this.router.navigate(['/app/documents', this.docId, 'editor']).then((ok) => {
-          if (!ok) {
-            this.error.set("Enregistré, mais navigation vers l'éditeur impossible. Ouvrez l'éditeur depuis la fiche.");
-          }
-        });
+        this.info.set('Signataires enregistrés.');
+        void this.router.navigate(['/app/documents', this.docId, 'editor']);
       },
       error: (err) => {
         this.loading.set(false);

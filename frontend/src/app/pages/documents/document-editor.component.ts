@@ -3,9 +3,6 @@ import { FormArray, FormBuilder, ReactiveFormsModule, Validators } from '@angula
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { DocumentItem, DocumentService, SignatureField, Signer } from '../../core/services/document.service';
 import { AuthService } from '../../core/services/auth.service';
-import * as pdfjsLib from 'pdfjs-dist';
-
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 
 type FieldType = SignatureField['type'];
 
@@ -554,6 +551,7 @@ export class DocumentEditorComponent implements OnInit {
       const token = this.auth.token();
       const res = await fetch(this.documents.fileUrl(doc.id), {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
+        signal: AbortSignal.timeout(25000),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const buffer = await res.arrayBuffer();
@@ -562,6 +560,7 @@ export class DocumentEditorComponent implements OnInit {
       if (head !== '%PDF-') {
         throw new Error('Réponse invalide (pas un PDF)');
       }
+      const pdfjsLib = await import('pdfjs-dist');
       this.pdfDoc = await pdfjsLib.getDocument({ data, disableWorker: true } as never).promise;
       this.pageCount.set(this.pdfDoc.numPages);
       this.page.set(1);
