@@ -1,6 +1,7 @@
 import { Component, inject, signal } from '@angular/core';
 import { FormArray, FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
+import { timeout } from 'rxjs';
 import { DocumentService } from '../../core/services/document.service';
 
 @Component({
@@ -28,10 +29,12 @@ import { DocumentService } from '../../core/services/document.service';
             <p class="file-name">Fichier sélectionné : {{ fileName() }}</p>
           }
           @if (loading()) {
-            <p class="file-name">Conversion en PDF en cours…</p>
+            <p class="file-name">{{ loadingMessage() }}</p>
           }
           @if (error()) { <p class="error">{{ error() }}</p> }
-          <button type="submit" [disabled]="metaForm.invalid || !file || loading()">Continuer</button>
+          <button type="submit" [disabled]="loading()">
+            {{ loading() ? 'Envoi…' : 'Continuer' }}
+          </button>
         </form>
       }
 
@@ -73,6 +76,7 @@ import { DocumentService } from '../../core/services/document.service';
     label { display:grid; gap:.3rem; color:#334155; }
     input, textarea, select { border:1px solid #cbd5e1; border-radius:.55rem; padding:.65rem .8rem; font:inherit; }
     button { background:#0468B1; color:#fff; border:0; border-radius:.55rem; padding:.75rem 1rem; font-weight:600; cursor:pointer; }
+    button:disabled { opacity:.65; cursor:wait; }
     .ghost { background:transparent; color:#0468B1; border:1px solid #0468B1; }
     .signer { border-top:1px solid #e2e8f0; padding-top:1rem; }
     .grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.7rem; }
@@ -90,6 +94,7 @@ export class DocumentCreateComponent {
 
   readonly step = signal(1);
   readonly loading = signal(false);
+  readonly loadingMessage = signal('Envoi du fichier…');
   readonly error = signal('');
   readonly fileName = signal('');
   file: File | null = null;
@@ -134,22 +139,42 @@ export class DocumentCreateComponent {
 
     this.file = selected;
     this.fileName.set(selected.name);
+    const currentTitle = (this.metaForm.controls.title.value || '').trim();
+    if (!currentTitle) {
+      this.metaForm.controls.title.setValue(selected.name.replace(/\.[^.]+$/, ''));
+    }
   }
 
   nextFromMeta() {
-    if (this.metaForm.invalid || !this.file) return;
+    if (!this.file) {
+      this.error.set('Choisissez un fichier PDF, Word ou Excel.');
+      return;
+    }
+
+    const currentTitle = (this.metaForm.controls.title.value || '').trim();
+    if (!currentTitle) {
+      this.metaForm.controls.title.setValue(this.file.name.replace(/\.[^.]+$/, ''));
+    }
+
+    if (this.metaForm.invalid) {
+      this.metaForm.markAllAsTouched();
+      this.error.set('Complétez le titre du document pour continuer.');
+      return;
+    }
 
     const v = this.metaForm.getRawValue();
+    const isPdf = this.file.name.toLowerCase().endsWith('.pdf');
 
     this.loading.set(true);
+    this.loadingMessage.set(isPdf ? 'Envoi du fichier…' : 'Conversion en PDF en cours…');
     this.error.set('');
     const fd = new FormData();
-    fd.append('title', v.title);
+    fd.append('title', v.title.trim());
     if (v.description) fd.append('description', v.description);
     fd.append('signers_count', String(v.signers_count));
-    fd.append('file', this.file);
+    fd.append('file', this.file, this.file.name);
 
-    this.documents.create(fd).subscribe({
+    this.documents.create(fd).pipe(timeout(120000)).subscribe({
       next: (doc) => {
         const id = Number((doc as any)?.id ?? (doc as any)?.data?.id);
         this.loading.set(false);
@@ -158,7 +183,6 @@ export class DocumentCreateComponent {
           return;
         }
         this.documentId = id;
-        // Page dédiée persistante (évite la perte de l'étape 2)
         this.router.navigate(['/app/documents', id, 'signers']);
       },
       error: (err) => {
@@ -228,6 +252,15 @@ export class DocumentCreateComponent {
     }
 
     const message = err?.error?.message as string | undefined;
+    if (err?.name === 'TimeoutError') {
+      return 'L’envoi prend trop de temps. Réessayez : le PDF peut être volumineux.';
+    }
+    if (err?.status === 401) {
+      return 'Session expirée. Reconnectez-vous, puis cliquez à nouveau sur Continuer.';
+    }
+    if (err?.status === 413) {
+      return 'Le fichier est trop volumineux (maximum 20 Mo).';
+    }
     if (message?.includes('validation.mimes') || message?.includes('mimes')) {
       return 'Formats acceptés : PDF, Word (.doc, .docx) et Excel (.xls, .xlsx).';
     }
@@ -235,10 +268,10 @@ export class DocumentCreateComponent {
       return "La date d'expiration doit être dans le futur (ou laissez vide).";
     }
     if (err?.status === 0) {
-      return 'Le serveur n’a pas répondu. Réessayez, la conversion PDF peut prendre une minute.';
+      return 'Le serveur n’a pas répondu. Réessayez, l’envoi du PDF peut prendre une minute.';
     }
-    if (err?.status === 500 || err?.status === 504) {
-      return 'La conversion Word/Excel vers PDF a échoué (délai dépassé). Réessayez.';
+    if (err?.status === 500 || err?.status === 502 || err?.status === 504) {
+      return 'L’envoi du fichier a échoué (délai dépassé). Réessayez avec un PDF plus léger si possible.';
     }
     return message || fallback;
   }

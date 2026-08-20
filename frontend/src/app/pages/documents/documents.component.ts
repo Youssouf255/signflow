@@ -68,9 +68,23 @@ export class DocumentsComponent implements OnInit {
     // "Envoyés" includes several statuses; list filter uses exact status.
     this.status = q === 'sent' ? '' : q;
     if (this.route.snapshot.queryParamMap.get('invited') === '1') {
-      this.invitedNotice.set(
-        'Invitation envoyée au premier signataire par e-mail. Après sa signature, le suivant recevra la notification. Quand tout le monde aura signé, chaque signataire recevra le PDF final.'
-      );
+      const to = this.route.snapshot.queryParamMap.get('to') || '';
+      const failed = this.route.snapshot.queryParamMap.get('failed') || '';
+      if (failed) {
+        this.invitedNotice.set(
+          'L’e-mail n’a pas pu partir vers ' + failed +
+          '. Une nouvelle tentative part automatiquement. Vérifiez aussi les courriers indésirables (spam) Yahoo.'
+        );
+      } else if (to) {
+        this.invitedNotice.set(
+          'Invitation envoyée à ' + to +
+          '. Si rien n’arrive, vérifiez les courriers indésirables (spam). Après sa signature, le suivant sera notifié. Quand tout le monde aura signé, chacun recevra le PDF final.'
+        );
+      } else {
+        this.invitedNotice.set(
+          'Invitation envoyée au premier signataire par e-mail. Vérifiez aussi les courriers indésirables (spam), surtout sur Yahoo. Après sa signature, le suivant recevra la notification. Quand tout le monde aura signé, chaque signataire recevra le PDF final.'
+        );
+      }
     }
     this.load();
   }

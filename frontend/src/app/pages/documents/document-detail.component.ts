@@ -63,6 +63,14 @@ import { AuditLog, DocumentItem, DocumentService, SignatureField, Signer } from 
             Le document a été envoyé. Seul le signataire dont c’est le tour reçoit un e-mail avec le lien de signature.
             Après sa signature, le suivant est notifié automatiquement.
             Quand tout le monde a signé, chacun reçoit le document final.
+            @if (currentPendingSigner(); as p) {
+              <div class="resend-row">
+                Signataire en cours : <strong>{{ p.email }}</strong>
+                <button class="cta send" type="button" (click)="resendInvite()" [disabled]="resending()">
+                  {{ resending() ? 'Envoi…' : 'Renvoyer l’invitation' }}
+                </button>
+              </div>
+            }
           </div>
         }
 
@@ -115,6 +123,7 @@ import { AuditLog, DocumentItem, DocumentService, SignatureField, Signer } from 
     .notice{background:#E8F3FA;border:1px solid #B6D4EA;color:#023A6C;padding:.85rem 1rem;border-radius:.7rem;margin-bottom:1rem;}
     .notice.warn{background:#fffbeb;border-color:#fde68a;color:#92400e;}
     .notice.success{background:#D6EAF8;border-color:#0468B1;color:#023A6C;}
+    .resend-row{display:flex;flex-wrap:wrap;gap:.6rem;align-items:center;margin-top:.75rem;}
     .grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem;}
     section{background:rgba(255,255,255,.78);border:1px solid rgba(4,104,177,.12);border-radius:.9rem;padding:1rem;}
     .item{padding:.75rem 0;border-bottom:1px solid #e2e8f0;display:grid;gap:.35rem;}
@@ -140,6 +149,7 @@ export class DocumentDetailComponent implements OnInit {
   readonly openingPdf = signal(false);
   readonly reopening = signal(false);
   readonly sending = signal(false);
+  readonly resending = signal(false);
   readonly error = signal('');
   readonly info = signal('');
   private docId = 0;
@@ -154,6 +164,43 @@ export class DocumentDetailComponent implements OnInit {
     this.documents.audit(this.docId).subscribe({
       next: (logs) => this.logs.set(logs),
       error: () => this.logs.set([]),
+    });
+  }
+
+  currentPendingSigner(): Signer | null {
+    const list = (this.doc()?.signers || [])
+      .filter((s) => s.role !== 'observer' && !['signed', 'approved', 'declined'].includes(s.status || ''))
+      .sort((a, b) => (a.signing_order || 0) - (b.signing_order || 0));
+    return list[0] || null;
+  }
+
+  resendInvite() {
+    const pending = this.currentPendingSigner();
+    this.resending.set(true);
+    this.error.set('');
+    this.info.set('');
+    this.documents.resendInvite(this.docId).subscribe({
+      next: (doc) => {
+        this.resending.set(false);
+        this.doc.set(doc);
+        const sent = doc.invitations?.sent || [];
+        const failed = doc.invitations?.failed || [];
+        if (sent.length) {
+          this.info.set(
+            'Invitation renvoyée à ' + sent.join(', ') +
+            '. Demandez de vérifier la boîte de réception et les courriers indésirables (spam).'
+          );
+        } else if (failed.length) {
+          this.error.set('Échec d’envoi vers ' + failed.join(', ') + '. Nouvel essai automatique dans quelques secondes.');
+        } else {
+          this.info.set('Nouvelle tentative d’invitation lancée' + (pending?.email ? ' pour ' + pending.email : '') + '.');
+        }
+        this.reload();
+      },
+      error: (err) => {
+        this.resending.set(false);
+        this.error.set(err?.error?.message || 'Impossible de renvoyer l’invitation');
+      },
     });
   }
 

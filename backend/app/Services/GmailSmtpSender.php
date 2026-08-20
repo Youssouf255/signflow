@@ -29,10 +29,14 @@ class GmailSmtpSender
             $from = $user;
         }
 
+        $text = trim(html_entity_decode(strip_tags(preg_replace('/<br\s*\/?>/i', "\n", $html) ?: $html), ENT_QUOTES, 'UTF-8'));
+
         $email = (new Email())
             ->from(new Address($from, $name))
+            ->replyTo(new Address($from, $name))
             ->to($to)
             ->subject($subject)
+            ->text($text !== '' ? $text : $subject)
             ->html($html);
 
         if ($attachPath && is_file($attachPath)) {
@@ -42,8 +46,8 @@ class GmailSmtpSender
         $userEnc = rawurlencode($user);
         $passEnc = rawurlencode($pass);
         $attempts = [
-            "smtp://{$userEnc}:{$passEnc}@smtp.gmail.com:587?encryption=tls&verify_peer=0",
-            "smtps://{$userEnc}:{$passEnc}@smtp.gmail.com:465?verify_peer=0",
+            "smtp://{$userEnc}:{$passEnc}@smtp.gmail.com:587?encryption=tls&verify_peer=0&timeout=20",
+            "smtps://{$userEnc}:{$passEnc}@smtp.gmail.com:465?verify_peer=0&timeout=20",
         ];
 
         $errors = [];

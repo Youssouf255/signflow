@@ -29,6 +29,10 @@
         </a>
     </p>
     <p style="font-size: 12px; color: #6b7280;">
+        Si le bouton ne s'affiche pas, copiez ce lien :<br>
+        <a href="{{ $link }}">{{ $link }}</a>
+    </p>
+    <p style="font-size: 12px; color: #6b7280;">
         Ce lien est personnel et securise. Ne le partagez pas.
     </p>
 </body>

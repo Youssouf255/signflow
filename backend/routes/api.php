@@ -35,6 +35,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('documents/{document}/signers', [DocumentController::class, 'syncSigners']);
     Route::post('documents/{document}/fields', [DocumentController::class, 'syncFields']);
     Route::post('documents/{document}/send', [DocumentController::class, 'send']);
+    Route::post('documents/{document}/resend-invite', [DocumentController::class, 'resendInvite']);
     Route::post('documents/{document}/reopen', [DocumentController::class, 'reopen']);
     Route::post('documents/{document}/replace-file', [DocumentController::class, 'replaceFile']);
     Route::get('documents/{document}/file', [DocumentController::class, 'file']);

@@ -38,11 +38,14 @@ class DocumentConversionService
         $disk->makeDirectory('documents/sources');
 
         if ($ext === 'pdf') {
-            $relative = 'documents/original/'.$reference.'.pdf';
-            $disk->put($relative, file_get_contents($file->getRealPath()));
+            $filename = $reference.'.pdf';
+            $stored = $file->storeAs('documents/original', $filename, 'local');
+            if (! $stored) {
+                throw new RuntimeException('Impossible d\'enregistrer le PDF.');
+            }
 
             return [
-                'pdf_relative' => $relative,
+                'pdf_relative' => $stored,
                 'source_relative' => null,
                 'extension' => $ext,
             ];

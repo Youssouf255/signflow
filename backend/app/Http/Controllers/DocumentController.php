@@ -47,10 +47,9 @@ class DocumentController extends Controller
             'description' => ['nullable', 'string'],
             'expires_at' => ['nullable', 'date', 'after:now'],
             'signers_count' => ['nullable', 'integer', 'min:0', 'max:50'],
-            'file' => ['required', 'file', 'max:20480', 'mimes:pdf,doc,docx,xls,xlsx', 'extensions:pdf,doc,docx,xls,xlsx'],
+            'file' => ['required', 'file', 'max:20480'],
         ], [
             'file.required' => 'Le fichier est obligatoire.',
-            'file.mimes' => 'Formats acceptés : PDF, Word (.doc, .docx) et Excel (.xls, .xlsx).',
             'file.max' => 'Le fichier ne doit pas dépasser 20 Mo.',
             'expires_at.after' => "La date d'expiration doit être dans le futur.",
             'expires_at.date' => "La date d'expiration est invalide.",
@@ -168,6 +167,17 @@ class DocumentController extends Controller
         return response()->json($document);
     }
 
+    public function resendInvite(Request $request, Document $document)
+    {
+        $this->authorizeOwner($request, $document);
+
+        $invitations = $this->documents->resendCurrentInvite($document, $request);
+        $document = $document->fresh(['signers', 'fields', 'auditLogs']);
+        $document->setAttribute('invitations', $invitations);
+
+        return response()->json($document);
+    }
+
     public function reopen(Request $request, Document $document)
     {
         $this->authorizeOwner($request, $document);
@@ -182,10 +192,9 @@ class DocumentController extends Controller
         $this->authorizeOwner($request, $document);
 
         $data = $request->validate([
-            'file' => ['required', 'file', 'max:20480', 'mimes:pdf,doc,docx,xls,xlsx', 'extensions:pdf,doc,docx,xls,xlsx'],
+            'file' => ['required', 'file', 'max:20480'],
         ], [
             'file.required' => 'Le fichier est obligatoire.',
-            'file.mimes' => 'Formats acceptés : PDF, Word (.doc, .docx) et Excel (.xls, .xlsx).',
             'file.max' => 'Le fichier ne doit pas dépasser 20 Mo.',
         ]);
 

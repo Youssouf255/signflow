@@ -514,9 +514,13 @@ export class DocumentEditorComponent implements OnInit {
           return;
         }
         this.documents.send(this.docId).subscribe({
-          next: () => {
+          next: (doc) => {
             this.loading.set(false);
-            this.router.navigate(['/app/documents'], { queryParams: { invited: '1' } });
+            const sent = (doc.invitations?.sent || []).join(',');
+            const failed = (doc.invitations?.failed || []).join(',');
+            this.router.navigate(['/app/documents'], {
+              queryParams: { invited: '1', to: sent, failed },
+            });
           },
           error: (err) => {
             this.loading.set(false);

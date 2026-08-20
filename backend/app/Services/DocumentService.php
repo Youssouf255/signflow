@@ -27,7 +27,8 @@ class DocumentService
 
     public function create(User $owner, array $data, UploadedFile $file, Request $request): Document
     {
-        return DB::transaction(function () use ($owner, $data, $file, $request) {
+        $path = '';
+        $document = DB::transaction(function () use ($owner, $data, $file, $request, &$path) {
             $reference = 'DOC-'.now()->format('Y').'-'.str_pad((string) (Document::max('id') + 1), 6, '0', STR_PAD_LEFT);
             $stored = $this->conversion->storeAsPdf($file, $reference);
             $path = $stored['pdf_relative'];
@@ -54,10 +55,19 @@ class DocumentService
                 'source_file' => $stored['source_relative'],
             ]);
 
-            $this->payloads->persistOriginal($document, $path);
-
-            return $document->load(['signers', 'fields']);
+            return $document;
         });
+
+        try {
+            $this->payloads->persistOriginal($document, $path);
+        } catch (\Throwable $e) {
+            Log::error('persistOriginal: '.$e->getMessage(), ['document_id' => $document->id]);
+            throw new \RuntimeException(
+                'Le fichier a été reçu mais n\'a pas pu être enregistré. Réessayez avec un PDF plus léger.'
+            );
+        }
+
+        return $document->load(['signers', 'fields']);
     }
 
     public function syncSigners(Document $document, array $signers, Request $request, User $user): Document
@@ -173,7 +183,8 @@ class DocumentService
             abort(422, 'Le fichier ne peut etre remplace qu\'en brouillon.');
         }
 
-        return DB::transaction(function () use ($document, $file, $request, $user) {
+        $path = '';
+        $document = DB::transaction(function () use ($document, $file, $request, $user, &$path) {
             $stored = $this->conversion->storeAsPdf($file, $document->reference);
             $path = $stored['pdf_relative'];
             $hash = $this->pdf->hashFile(Storage::disk('local')->path($path));
@@ -194,10 +205,12 @@ class DocumentService
                 'source_file' => $stored['source_relative'],
             ]);
 
-            $this->payloads->persistOriginal($document, $path);
-
             return $document->fresh(['signers', 'fields']);
         });
+
+        $this->payloads->persistOriginal($document, $path);
+
+        return $document;
     }
 
     public function send(Document $document, Request $request, User $user): Document
@@ -224,7 +237,7 @@ class DocumentService
         return $document;
     }
 
-    public function notifyNextSigners(Document $document, ?Request $request = null): array
+    public function notifyNextSigners(Document $document, ?Request $request = null, bool $force = false): array
     {
         $nextOrder = $document->signers()
             ->where('role', '!=', 'observer')
@@ -232,37 +245,61 @@ class DocumentService
             ->min('signing_order');
 
         if ($nextOrder === null) {
-            return ['queued' => false, 'signer_ids' => []];
+            return ['queued' => false, 'sent' => [], 'failed' => [], 'signer_ids' => []];
         }
 
-        $ids = $document->signers()
+        $query = $document->signers()
             ->where('role', '!=', 'observer')
             ->where('signing_order', $nextOrder)
-            ->whereNotIn('status', ['signed', 'approved', 'declined'])
-            ->whereNull('notified_at')
-            ->pluck('id')
-            ->all();
+            ->whereNotIn('status', ['signed', 'approved', 'declined']);
 
-        $ids = array_values(array_map('intval', $ids));
-
-        if ($ids === []) {
-            return ['queued' => false, 'signer_ids' => []];
+        if (! $force) {
+            $query->whereNull('notified_at');
         }
 
-        $this->mailQueue->push([
-            'type' => 'invite',
-            'document_id' => $document->id,
-            'signer_ids' => $ids,
-        ]);
+        $targets = $query->get();
+        $ids = $targets->pluck('id')->map(fn ($id) => (int) $id)->values()->all();
+
+        if ($ids === []) {
+            return ['queued' => false, 'sent' => [], 'failed' => [], 'signer_ids' => []];
+        }
+
+        if ($force) {
+            $document->signers()->whereIn('id', $ids)->update(['notified_at' => null]);
+            $targets = $document->signers()->whereIn('id', $ids)->get();
+        }
+
+        @set_time_limit(60);
+        $result = $this->inviteSigners($document, $targets, $request);
+
+        if (($result['failed'] ?? []) !== []) {
+            $this->mailQueue->push([
+                'type' => 'invite',
+                'document_id' => $document->id,
+                'signer_ids' => $ids,
+            ]);
+        }
 
         if ($document->status === 'sent') {
             $document->update(['status' => 'in_progress']);
         }
 
         return [
-            'queued' => true,
+            'queued' => ($result['failed'] ?? []) !== [],
+            'sent' => $result['sent'] ?? [],
+            'failed' => $result['failed'] ?? [],
             'signer_ids' => $ids,
+            'error' => $result['error'] ?? null,
         ];
+    }
+
+    public function resendCurrentInvite(Document $document, Request $request): array
+    {
+        if (in_array($document->status, ['draft', 'completed', 'declined', 'expired', 'cancelled'], true)) {
+            abort(422, 'Impossible de renvoyer une invitation pour ce document.');
+        }
+
+        return $this->notifyNextSigners($document, $request, true);
     }
 
     public function queueCompletedMail(Document $document): void
@@ -352,6 +389,11 @@ class DocumentService
 
         foreach ($signers as $signer) {
             if (! $signer instanceof Signer) {
+                continue;
+            }
+
+            if ($signer->notified_at) {
+                $sent[] = $signer->email;
                 continue;
             }
 

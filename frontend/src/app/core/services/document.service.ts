@@ -102,6 +102,10 @@ export class DocumentService {
     return this.api.post<DocumentItem>(`documents/${id}/send`);
   }
 
+  resendInvite(id: number) {
+    return this.api.post<DocumentItem>(`documents/${id}/resend-invite`);
+  }
+
   reopen(id: number) {
     return this.api.post<DocumentItem>(`documents/${id}/reopen`);
   }
