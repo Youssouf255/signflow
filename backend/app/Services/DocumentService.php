@@ -379,27 +379,36 @@ class DocumentService
         }
 
         try {
-            Mail::to($email)->send($mailable);
+            Mail::mailer('smtp')->to($email)->send($mailable);
             $this->audit->log($document, 'email.delivered', $request, null, $signer, [
                 'email' => $email,
-                'mailer' => config('mail.default'),
+                'mailer' => 'smtp',
             ]);
 
             return true;
-        } catch (\Throwable $e) {
-            $this->lastMailError = $e->getMessage();
-            Log::error('Echec envoi email SignFlow : '.$e->getMessage(), [
-                'email' => $email,
-                'document_id' => $document->id,
-                'mailer' => config('mail.default'),
-                'username' => config('mail.mailers.smtp.username'),
-            ]);
-            $this->audit->log($document, 'email.failed', $request, null, $signer, [
-                'email' => $email,
-                'error' => mb_substr($e->getMessage(), 0, 500),
-            ]);
+        } catch (\Throwable $first) {
+            try {
+                Mail::mailer('smtp_ssl')->to($email)->send($mailable);
+                $this->audit->log($document, 'email.delivered', $request, null, $signer, [
+                    'email' => $email,
+                    'mailer' => 'smtp_ssl',
+                ]);
 
-            return false;
+                return true;
+            } catch (\Throwable $e) {
+                $this->lastMailError = $first->getMessage().' | '.$e->getMessage();
+                Log::error('Echec envoi email SignFlow : '.$this->lastMailError, [
+                    'email' => $email,
+                    'document_id' => $document->id,
+                    'username' => config('mail.mailers.smtp.username'),
+                ]);
+                $this->audit->log($document, 'email.failed', $request, null, $signer, [
+                    'email' => $email,
+                    'error' => mb_substr($this->lastMailError, 0, 500),
+                ]);
+
+                return false;
+            }
         }
     }
 }

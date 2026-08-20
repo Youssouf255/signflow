@@ -182,9 +182,9 @@ export class DocumentSignersComponent implements OnInit {
         const failed = doc.invitations?.failed || [];
         if (failed.length && !sent.length) {
           this.error.set(
-            'Signataires enregistrés, mais aucun e-mail n’a pu partir. ' +
-              (doc.invitations?.error ? 'Erreur SMTP : ' + doc.invitations.error + ' ' : '') +
-              'Échec : ' +
+            'Signataires enregistrés. Échec Gmail : ' +
+              (doc.invitations?.error || 'connexion SMTP refusée') +
+              ' — destinataires : ' +
               failed.join(', ')
           );
           return;

@@ -100,7 +100,7 @@ $keys = [
     'DB_URL', 'DATABASE_URL', 'DB_SSLMODE',
     'SESSION_DRIVER', 'QUEUE_CONNECTION', 'CACHE_STORE', 'CACHE_DRIVER',
     'FILESYSTEM_DISK', 'MAIL_MAILER', 'MAIL_HOST', 'MAIL_PORT', 'MAIL_USERNAME',
-    'MAIL_PASSWORD', 'MAIL_ENCRYPTION', 'MAIL_SCHEME', 'MAIL_FROM_ADDRESS', 'MAIL_FROM_NAME', 'MAIL_EHLO_DOMAIN',
+    'MAIL_PASSWORD', 'MAIL_ENCRYPTION', 'MAIL_SCHEME', 'MAIL_URL', 'MAIL_FROM_ADDRESS', 'MAIL_FROM_NAME', 'MAIL_EHLO_DOMAIN',
     'LOG_CHANNEL', 'REDIS_CLIENT',
 ];
 $lines = preg_split("/\r\n|\n|\r/", $env) ?: [];
@@ -124,7 +124,6 @@ $lines[] = 'APP_URL='.$quote($appUrl);
 $lines[] = 'FRONTEND_URL='.$quote($frontendUrl);
 if ($sanctumHost !== '') {
     $lines[] = 'SANCTUM_STATEFUL_DOMAINS='.$quote($sanctumHost);
-    $lines[] = 'MAIL_EHLO_DOMAIN='.$quote($sanctumHost);
 }
 $lines[] = 'DB_CONNECTION=pgsql';
 $lines[] = 'DB_HOST='.$quote($host);
@@ -147,6 +146,15 @@ $lines[] = 'MAIL_USERNAME='.$quote($mailUser);
 $lines[] = 'MAIL_PASSWORD='.$quote($mailPass);
 $lines[] = 'MAIL_ENCRYPTION='.$quote($mailEncryption !== '' ? $mailEncryption : 'tls');
 $lines[] = 'MAIL_SCHEME=smtp';
+if ($mailer === 'smtp' && $mailUser !== '' && $mailPass !== '') {
+    $lines[] = 'MAIL_URL='.$quote(sprintf(
+        'smtp://%s:%s@%s:%s?encryption=tls&verify_peer=0',
+        rawurlencode($mailUser),
+        rawurlencode($mailPass),
+        $mailHost !== '' ? $mailHost : 'smtp.gmail.com',
+        $mailPort !== '' ? $mailPort : '587'
+    ));
+}
 $lines[] = 'MAIL_FROM_ADDRESS='.$quote($mailFrom !== '' ? $mailFrom : 'noreply@signflow.local');
 $lines[] = 'MAIL_FROM_NAME='.$quote($mailFromName !== '' ? $mailFromName : 'SignFlow');
 $lines[] = 'LOG_CHANNEL=stderr';
