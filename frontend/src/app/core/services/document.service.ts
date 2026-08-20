@@ -32,6 +32,7 @@ export interface MailInvitations {
   failed?: string[];
   mailer?: string;
   error?: string;
+  queued?: boolean;
 }
 
 export interface DocumentItem {

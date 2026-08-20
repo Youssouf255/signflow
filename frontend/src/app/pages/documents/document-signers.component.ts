@@ -178,9 +178,10 @@ export class DocumentSignersComponent implements OnInit {
     this.documents.syncSigners(this.docId, payload).subscribe({
       next: (doc) => {
         this.loading.set(false);
+        const queued = !!doc.invitations?.queued;
         const sent = doc.invitations?.sent || [];
         const failed = doc.invitations?.failed || [];
-        if (failed.length && !sent.length) {
+        if (failed.length && !sent.length && !queued) {
           this.error.set(
             'Signataires enregistrés. Échec Gmail : ' +
               (doc.invitations?.error || 'connexion SMTP refusée') +
@@ -189,11 +190,11 @@ export class DocumentSignersComponent implements OnInit {
           );
           return;
         }
-        const extra = failed.length ? ' Échec pour : ' + failed.join(', ') : '';
         this.info.set(
-          (sent.length ? 'Invitation envoyée à ' + sent.join(', ') + '.' : 'Signataires enregistrés.') +
-            extra +
-            " Ouverture de l'éditeur…"
+          queued
+            ? 'Signataires enregistrés. Invitations en cours d’envoi… Ouverture de l’éditeur…'
+            : (sent.length ? 'Invitation envoyée à ' + sent.join(', ') + '.' : 'Signataires enregistrés.') +
+              " Ouverture de l'éditeur…"
         );
         this.router.navigate(['/app/documents', this.docId, 'editor']).then((ok) => {
           if (!ok) {

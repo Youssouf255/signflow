@@ -108,23 +108,44 @@ class DocumentService
             return $document->fresh(['signers', 'fields']);
         });
 
-        try {
-            @set_time_limit(60);
-            @ini_set('default_socket_timeout', '8');
-            $toInvite = $document->signers->filter(fn (Signer $signer) => in_array((int) $signer->id, array_map('intval', $newSignerIds), true));
-            $invitations = $this->inviteSigners($document, $toInvite, $request);
-        } catch (\Throwable $e) {
-            Log::error('Invitation apres enregistrement signataires : '.$e->getMessage());
-            $invitations = [
-                'sent' => [],
-                'failed' => $document->signers->pluck('email')->all(),
-                'mailer' => config('mail.default'),
-                'error' => $e->getMessage(),
-            ];
-        }
-        $document->setAttribute('invitations', $invitations);
+        $this->dispatchInvites((int) $document->id, $newSignerIds);
+        $document->setAttribute('invitations', [
+            'sent' => [],
+            'failed' => [],
+            'queued' => true,
+            'mailer' => config('mail.default'),
+            'error' => null,
+        ]);
 
         return $document;
+    }
+
+    public function dispatchInvites(int $documentId, array $signerIds): void
+    {
+        $signerIds = array_values(array_filter(array_map('intval', $signerIds)));
+        if ($signerIds === []) {
+            return;
+        }
+
+        if (PHP_OS_FAMILY === 'Windows') {
+            $document = Document::with('signers')->find($documentId);
+            if ($document) {
+                $targets = $document->signers->filter(fn (Signer $signer) => in_array((int) $signer->id, $signerIds, true));
+                $this->inviteSigners($document, $targets);
+            }
+
+            return;
+        }
+
+        $cmd = sprintf(
+            'nohup %s %s signflow:invite-signers %d %s >> %s 2>&1 &',
+            escapeshellarg(PHP_BINARY),
+            escapeshellarg(base_path('artisan')),
+            $documentId,
+            escapeshellarg(implode(',', $signerIds)),
+            escapeshellarg(storage_path('logs/mail-invite.log'))
+        );
+        @exec($cmd);
     }
 
     public function syncFields(Document $document, array $fields, Request $request, User $user): Document
@@ -238,28 +259,35 @@ class DocumentService
         ]);
 
         $this->audit->log($document, 'document.sent', $request, $user);
-        $invitations = $this->notifyNextSigners($document, $request);
+        $this->notifyNextSigners($document, $request);
 
         $document = $document->fresh(['signers', 'fields', 'auditLogs']);
-        $document->setAttribute('invitations', $invitations);
+        $document->setAttribute('invitations', [
+            'queued' => true,
+            'mailer' => config('mail.default'),
+        ]);
 
         return $document;
     }
 
     public function notifyNextSigners(Document $document, ?Request $request = null): array
     {
-        $targets = $document->signers()
+        $ids = $document->signers()
             ->whereNotIn('status', ['signed', 'approved', 'declined'])
             ->whereNull('notified_at')
-            ->get();
+            ->pluck('id')
+            ->all();
 
-        $invitations = $this->inviteSigners($document, $targets, $request);
+        $this->dispatchInvites((int) $document->id, $ids);
 
         if ($document->status === 'sent') {
             $document->update(['status' => 'in_progress']);
         }
 
-        return $invitations;
+        return [
+            'queued' => true,
+            'mailer' => config('mail.default'),
+        ];
     }
 
     public function notifyDocumentCompleted(Document $document, ?Request $request = null): void
@@ -318,7 +346,7 @@ class DocumentService
         return rtrim((string) config('app.url'), '/');
     }
 
-    private function inviteSigners(Document $document, iterable $signers, ?Request $request = null): array
+    public function inviteSigners(Document $document, iterable $signers, ?Request $request = null): array
     {
         $sent = [];
         $failed = [];
