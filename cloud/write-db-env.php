@@ -47,17 +47,28 @@ if ($sanctumHost === '' && $appUrl !== '') {
     $sanctumHost = (string) (parse_url($appUrl, PHP_URL_HOST) ?: '');
 }
 
-$clean = static function (?string $value): string {
-    $value = trim((string) $value);
-    if ($value === '' || strcasecmp($value, 'null') === 0) {
-        return '';
+$envv = static function (string $key): string {
+    $candidates = [getenv($key), $_ENV[$key] ?? null, $_SERVER[$key] ?? null];
+    foreach ($candidates as $value) {
+        if (! is_string($value)) {
+            continue;
+        }
+        $value = trim($value);
+        if ($value !== '' && strcasecmp($value, 'null') !== 0) {
+            return $value;
+        }
     }
-    return $value;
+
+    return '';
 };
 
-$mailUser = $clean(getenv('MAIL_USERNAME') ?: '');
-$mailPass = str_replace(' ', '', $clean(getenv('MAIL_PASSWORD') ?: ''));
-$mailHost = $clean(getenv('MAIL_HOST') ?: '');
+$mailUser = $envv('MAIL_USERNAME');
+$mailPass = str_replace(' ', '', $envv('MAIL_PASSWORD'));
+if ($mailUser !== '' && $mailPass !== '' && ! str_contains($mailUser, '@') && str_contains($mailPass, '@')) {
+    [$mailUser, $mailPass] = [$mailPass, $mailUser];
+    fwrite(STDERR, "MAIL_USERNAME et MAIL_PASSWORD etaient inverses : correction automatique.\n");
+}
+$mailHost = $envv('MAIL_HOST');
 if ($mailHost === '' && str_contains($mailUser, '@')) {
     $domain = strtolower((string) substr(strrchr($mailUser, '@'), 1));
     $mailHost = match (true) {
@@ -67,14 +78,14 @@ if ($mailHost === '' && str_contains($mailUser, '@')) {
         default => 'smtp.gmail.com',
     };
 }
-$mailPort = $clean(getenv('MAIL_PORT') ?: '587');
-$mailEncryption = $clean(getenv('MAIL_ENCRYPTION') ?: 'tls');
-$mailFrom = $clean(getenv('MAIL_FROM_ADDRESS') ?: $mailUser);
+$mailPort = $envv('MAIL_PORT') !== '' ? $envv('MAIL_PORT') : '587';
+$mailEncryption = $envv('MAIL_ENCRYPTION') !== '' ? $envv('MAIL_ENCRYPTION') : 'tls';
+$mailFrom = $envv('MAIL_FROM_ADDRESS') !== '' ? $envv('MAIL_FROM_ADDRESS') : $mailUser;
 if ($mailFrom === '' || str_contains($mailFrom, 'signflow.local') || str_contains($mailFrom, 'example.com')) {
     $mailFrom = $mailUser;
 }
-$mailFromName = $clean(getenv('MAIL_FROM_NAME') ?: 'SignFlow');
-$mailer = $clean(getenv('MAIL_MAILER') ?: '');
+$mailFromName = $envv('MAIL_FROM_NAME') !== '' ? $envv('MAIL_FROM_NAME') : 'SignFlow';
+$mailer = $envv('MAIL_MAILER');
 if ($mailUser !== '' && $mailPass !== '' && $mailHost !== '') {
     $mailer = $mailer === '' || $mailer === 'log' ? 'smtp' : $mailer;
 } else {
@@ -146,5 +157,5 @@ fwrite(STDERR, "PostgreSQL hote={$host} base={$db} ssl={$ssl}\n");
 fwrite(STDERR, "APP_KEY initialisee (".strlen($appKey)." car.).\n");
 fwrite(STDERR, $mailer === 'smtp'
     ? "SMTP actif host={$mailHost} port={$mailPort} user={$mailUser}\n"
-    : "Mails en mode log (ajoutez MAIL_USERNAME et MAIL_PASSWORD sur Render pour SMTP).\n"
+    : "Mails en mode log. MAIL_USERNAME=".($mailUser !== '' ? 'oui' : 'ABSENT')." MAIL_PASSWORD=".($mailPass !== '' ? 'oui' : 'ABSENT')."\n"
 );
