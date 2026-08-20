@@ -34,10 +34,15 @@ class SendPendingMailCommand extends Command
                 continue;
             }
 
-            $ids = array_map('intval', $job['signer_ids'] ?? []);
+            $ids = array_values(array_map('intval', $job['signer_ids'] ?? []));
+            if ($ids === []) {
+                $this->warn('invite sans signataire document='.$document->id);
+                continue;
+            }
             $targets = $document->signers->filter(fn ($signer) => in_array((int) $signer->id, $ids, true));
             if ($targets->isEmpty()) {
-                $targets = $document->signers->whereNull('notified_at');
+                $this->warn('signataires introuvables document='.$document->id);
+                continue;
             }
             $result = $documents->inviteSigners($document, $targets);
             $this->info('invite sent='.count($result['sent'] ?? []).' failed='.count($result['failed'] ?? []));

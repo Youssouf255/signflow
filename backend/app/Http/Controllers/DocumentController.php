@@ -77,7 +77,6 @@ class DocumentController extends Controller
         $this->authorizeOwner($request, $document);
 
         $document->load(['signers', 'fields', 'signatures', 'auditLogs.signer', 'owner']);
-        $document->signers->each->makeVisible(['access_token']);
 
         return response()->json($document);
     }

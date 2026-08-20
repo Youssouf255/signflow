@@ -62,9 +62,7 @@ class DocumentService
 
     public function syncSigners(Document $document, array $signers, Request $request, User $user): Document
     {
-        $newSignerIds = [];
-
-        $document = DB::transaction(function () use ($document, $signers, $request, $user, &$newSignerIds) {
+        return DB::transaction(function () use ($document, $signers, $request, $user) {
             $existing = $document->signers()->get()->keyBy(fn (Signer $signer) => strtolower(trim($signer->email)));
             $keepIds = [];
 
@@ -92,7 +90,6 @@ class DocumentService
                     'access_token' => hash('sha256', Str::uuid()->toString().Str::random(40)),
                 ]);
                 $keepIds[] = $created->id;
-                $newSignerIds[] = $created->id;
             }
 
             $removed = $document->signers()->whereNotIn('id', $keepIds)->get();
@@ -106,19 +103,6 @@ class DocumentService
 
             return $document->fresh(['signers', 'fields']);
         });
-
-        $this->mailQueue->push([
-            'type' => 'invite',
-            'document_id' => $document->id,
-            'signer_ids' => array_values(array_map('intval', $newSignerIds)),
-        ]);
-        $document->setAttribute('invitations', [
-            'queued' => true,
-            'sent' => [],
-            'failed' => [],
-        ]);
-
-        return $document;
     }
 
     public function syncFields(Document $document, array $fields, Request $request, User $user): Document
@@ -242,16 +226,33 @@ class DocumentService
 
     public function notifyNextSigners(Document $document, ?Request $request = null): array
     {
+        $nextOrder = $document->signers()
+            ->where('role', '!=', 'observer')
+            ->whereNotIn('status', ['signed', 'approved', 'declined'])
+            ->min('signing_order');
+
+        if ($nextOrder === null) {
+            return ['queued' => false, 'signer_ids' => []];
+        }
+
         $ids = $document->signers()
+            ->where('role', '!=', 'observer')
+            ->where('signing_order', $nextOrder)
             ->whereNotIn('status', ['signed', 'approved', 'declined'])
             ->whereNull('notified_at')
             ->pluck('id')
             ->all();
 
+        $ids = array_values(array_map('intval', $ids));
+
+        if ($ids === []) {
+            return ['queued' => false, 'signer_ids' => []];
+        }
+
         $this->mailQueue->push([
             'type' => 'invite',
             'document_id' => $document->id,
-            'signer_ids' => array_values(array_map('intval', $ids)),
+            'signer_ids' => $ids,
         ]);
 
         if ($document->status === 'sent') {
@@ -260,6 +261,7 @@ class DocumentService
 
         return [
             'queued' => true,
+            'signer_ids' => $ids,
         ];
     }
 

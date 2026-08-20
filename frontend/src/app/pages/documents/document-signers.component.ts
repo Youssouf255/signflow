@@ -179,7 +179,7 @@ export class DocumentSignersComponent implements OnInit {
     this.documents.syncSigners(this.docId, payload).subscribe({
       next: () => {
         this.loading.set(false);
-        this.info.set('Signataires enregistrés. Les e-mails partent dans quelques secondes.');
+        this.info.set('Signataires enregistrés. Placez les champs, puis cliquez Envoyer pour notifier le premier signataire.');
         void this.router.navigate(['/app/documents', this.docId, 'editor']);
       },
       error: (err) => {
@@ -197,7 +197,7 @@ export class DocumentSignersComponent implements OnInit {
         const status = err?.status;
         if (status === 0 || status === 502 || status === 504) {
           this.error.set(
-            'La page a mis trop de temps, mais les signataires sont souvent déjà enregistrés. Rechargez, puis ouvrez l’éditeur. Les e-mails partent en arrière-plan.'
+            'La page a mis trop de temps, mais les signataires sont souvent déjà enregistrés. Rechargez, puis ouvrez l’éditeur pour placer les champs et envoyer.'
           );
           return;
         }

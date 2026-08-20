@@ -14,6 +14,9 @@ import { DocumentItem, DocumentService } from '../../core/services/document.serv
         <h2>Documents</h2>
         <a class="cta" routerLink="/app/documents/new">+ Envoyer un document</a>
       </div>
+      @if (invitedNotice()) {
+        <div class="notice">{{ invitedNotice() }}</div>
+      }
       <div class="filters">
         <input [(ngModel)]="search" (ngModelChange)="load()" placeholder="Rechercher..." />
         <select [(ngModel)]="status" (ngModelChange)="load()">
@@ -49,12 +52,14 @@ import { DocumentItem, DocumentService } from '../../core/services/document.serv
     .row { display:flex; justify-content:space-between; gap:1rem; padding:1rem; background:rgba(255,255,255,.75); border-radius:.75rem; text-decoration:none; color:inherit; border:1px solid rgba(15,23,42,.06); }
     small { display:block; color:#64748b; margin-top:.2rem; }
     .badge { align-self:center; background:#e2e8f0; padding:.25rem .55rem; border-radius:999px; font-size:.78rem; text-transform:capitalize; }
+    .notice { background:#D6EAF8; border:1px solid #0468B1; color:#023A6C; padding:.85rem 1rem; border-radius:.7rem; margin-bottom:1rem; line-height:1.45; }
   `],
 })
 export class DocumentsComponent implements OnInit {
   private readonly documents = inject(DocumentService);
   private readonly route = inject(ActivatedRoute);
   readonly items = signal<DocumentItem[]>([]);
+  readonly invitedNotice = signal('');
   search = '';
   status = '';
 
@@ -62,6 +67,11 @@ export class DocumentsComponent implements OnInit {
     const q = this.route.snapshot.queryParamMap.get('status') || '';
     // "Envoyés" includes several statuses; list filter uses exact status.
     this.status = q === 'sent' ? '' : q;
+    if (this.route.snapshot.queryParamMap.get('invited') === '1') {
+      this.invitedNotice.set(
+        'Invitation envoyée au premier signataire par e-mail. Après sa signature, le suivant recevra la notification. Quand tout le monde aura signé, chaque signataire recevra le PDF final.'
+      );
+    }
     this.load();
   }
 

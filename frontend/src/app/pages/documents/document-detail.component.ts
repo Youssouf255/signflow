@@ -52,14 +52,17 @@ import { AuditLog, DocumentItem, DocumentService, SignatureField, Signer } from 
         } @else if (d.status === 'draft') {
           <div class="notice warn">
             Le document est encore un brouillon : la signature n’est pas active.
-            Cliquez sur <strong>Envoyer pour signature</strong> pour notifier le premier signataire
-            et afficher les boutons <em>Signer maintenant</em>.
+            Cliquez sur <strong>Envoyer pour signature</strong> pour notifier uniquement le premier signataire par e-mail.
+          </div>
+        } @else if (d.status === 'completed') {
+          <div class="notice success">
+            Toutes les signatures sont collectées. Chaque signataire a reçu (ou va recevoir) le PDF final par e-mail.
           </div>
         } @else {
           <div class="notice">
-            <strong>Important :</strong> "Aperçu PDF" montre seulement le fichier.
-            Pour signer, utilisez le bouton vert <em>Signer maintenant</em> ci-dessous.
-            Pour modifier et renvoyer, cliquez <em>Modifier pour actualiser et resoumettre</em>.
+            Le document a été envoyé. Seul le signataire dont c’est le tour reçoit un e-mail avec le lien de signature.
+            Après sa signature, le suivant est notifié automatiquement.
+            Quand tout le monde a signé, chacun reçoit le document final.
           </div>
         }
 
@@ -74,11 +77,6 @@ import { AuditLog, DocumentItem, DocumentService, SignatureField, Signer } from 
               <div class="item">
                 <strong>{{ s.first_name }} {{ s.last_name }}</strong>
                 <small>{{ s.email }} · Ordre {{ s.signing_order }} · {{ s.role }} · {{ statusLabel(s.status || '') }}</small>
-                @if (s.access_token && d.status !== 'draft') {
-                  <a class="sign-cta" [routerLink]="['/sign', s.access_token]">
-                    Signer maintenant ({{ s.first_name }})
-                  </a>
-                }
               </div>
             } @empty {
               <p class="empty">Aucun signataire pour le moment.</p>
@@ -196,8 +194,7 @@ export class DocumentDetailComponent implements OnInit {
         next: (doc) => {
           this.sending.set(false);
           this.doc.set(doc);
-          this.info.set('Signatures activées. Le premier signataire peut cliquer sur « Signer maintenant ».');
-          this.reload();
+          this.router.navigate(['/app/documents'], { queryParams: { invited: '1' } });
         },
         error: (err) => {
           this.sending.set(false);

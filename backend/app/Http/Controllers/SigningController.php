@@ -82,10 +82,6 @@ class SigningController extends Controller
             ->sortBy('signing_order')
             ->first();
 
-        if ($next) {
-            $next->makeVisible(['access_token']);
-        }
-
         return response()->json([
             'message' => 'Signature enregistree',
             'document_status' => $document->status,
@@ -95,7 +91,6 @@ class SigningController extends Controller
                 'last_name' => $next->last_name,
                 'email' => $next->email,
                 'signing_order' => $next->signing_order,
-                'access_token' => $next->access_token,
                 'status' => $next->status,
             ] : null,
         ]);

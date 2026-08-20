@@ -287,8 +287,8 @@ export class DocumentEditorComponent implements OnInit {
           this.fields.set(fields);
           this.loading.set(false);
           this.editingSigners.set(false);
-          this.saveOk.set(this.invitationMessage(doc, list));
-          this.status.set(this.invitationMessage(doc, list));
+          this.saveOk.set(this.signersSavedMessage(list));
+          this.status.set(this.signersSavedMessage(list));
         };
 
         if (!remapped.length) {
@@ -516,7 +516,7 @@ export class DocumentEditorComponent implements OnInit {
         this.documents.send(this.docId).subscribe({
           next: () => {
             this.loading.set(false);
-            this.router.navigate(['/app/documents', this.docId]);
+            this.router.navigate(['/app/documents'], { queryParams: { invited: '1' } });
           },
           error: (err) => {
             this.loading.set(false);
@@ -531,17 +531,9 @@ export class DocumentEditorComponent implements OnInit {
     });
   }
 
-  private invitationMessage(doc: DocumentItem, list: Signer[]): string {
-    const sent = doc.invitations?.sent || [];
-    const failed = doc.invitations?.failed || [];
-    const names = 'Signataires : ' + list.map((s) => `${s.first_name} ${s.last_name}`).join(', ');
-    if (sent.length) {
-      return names + '. Invitation envoyée à ' + sent.join(', ') + (failed.length ? '. Échec : ' + failed.join(', ') : '');
-    }
-    if (failed.length) {
-      return names + '. E-mail non envoyé (' + failed.join(', ') + '). Vérifiez SMTP sur Render.';
-    }
-    return names + '.';
+  private signersSavedMessage(list: Signer[]): string {
+    return 'Signataires enregistrés : ' + list.map((s) => `${s.first_name} ${s.last_name}`).join(', ')
+      + '. Cliquez Envoyer pour notifier le premier signataire.';
   }
 
   private async loadPdf(doc: DocumentItem) {

@@ -408,14 +408,14 @@ export class SignComponent implements OnInit, AfterViewInit {
         this.loading.set(false);
         this.canSign.set(false);
         const next = res?.next_signer;
-        if (next?.access_token) {
+        if (res?.document_status === 'completed') {
+          this.message.set('Signature enregistrée. Le document est finalisé : tous les signataires recevront le PDF signé par e-mail.');
+        } else if (next?.email) {
           this.message.set(
-            `Signature enregistrée. Le document passe maintenant à ${next.first_name} ${next.last_name}.`
+            `Signature enregistrée. Une notification va être envoyée à ${next.first_name} ${next.last_name} (${next.email}).`
           );
-        } else if (res?.document_status === 'completed') {
-          this.message.set('Signature enregistrée. Document finalisé (tous les signataires ont signé).');
         } else {
-          this.message.set('Signature enregistrée. Le document continue vers le signataire suivant.');
+          this.message.set('Signature enregistrée. Le signataire suivant va recevoir un e-mail.');
         }
       },
       error: (err) => {
