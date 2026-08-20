@@ -17,6 +17,8 @@ use Illuminate\Support\Str;
 
 class DocumentService
 {
+    private ?string $lastMailError = null;
+
     public function __construct(
         private AuditService $audit,
         private PdfService $pdf,
@@ -308,6 +310,7 @@ class DocumentService
     {
         $sent = [];
         $failed = [];
+        $this->lastMailError = null;
         $base = $this->publicBaseUrl();
 
         foreach ($signers as $signer) {
@@ -339,6 +342,7 @@ class DocumentService
             'sent' => $sent,
             'failed' => $failed,
             'mailer' => config('mail.default'),
+            'error' => $this->lastMailError,
         ];
     }
 
@@ -354,25 +358,47 @@ class DocumentService
             return false;
         }
 
+        $username = (string) config('mail.mailers.smtp.username');
+        if (config('mail.default') === 'log' || $username === '') {
+            $this->lastMailError = 'SMTP non configure. Ajoutez MAIL_USERNAME, MAIL_PASSWORD et MAIL_FROM_ADDRESS dans Render, puis redeployez.';
+            Log::error($this->lastMailError);
+
+            return false;
+        }
+
         try {
-            Mail::to($email)->send($mailable);
+            Mail::mailer('smtp')->to($email)->send($mailable);
             $this->audit->log($document, 'email.delivered', $request, null, $signer, [
                 'email' => $email,
-                'mailer' => config('mail.default'),
+                'mailer' => 'smtp',
             ]);
 
             return true;
-        } catch (\Throwable $e) {
-            Log::error('Echec envoi email SignFlow : '.$e->getMessage(), [
-                'email' => $email,
-                'document_id' => $document->id,
-            ]);
-            $this->audit->log($document, 'email.failed', $request, null, $signer, [
-                'email' => $email,
-                'error' => $e->getMessage(),
-            ]);
+        } catch (\Throwable $first) {
+            try {
+                Mail::mailer('smtp_ssl')->to($email)->send($mailable);
+                $this->audit->log($document, 'email.delivered', $request, null, $signer, [
+                    'email' => $email,
+                    'mailer' => 'smtp_ssl',
+                ]);
 
-            return false;
+                return true;
+            } catch (\Throwable $e) {
+                $this->lastMailError = $e->getMessage();
+                Log::error('Echec envoi email SignFlow : '.$e->getMessage(), [
+                    'email' => $email,
+                    'document_id' => $document->id,
+                    'first_error' => $first->getMessage(),
+                    'mailer' => config('mail.default'),
+                    'username' => config('mail.mailers.smtp.username'),
+                ]);
+                $this->audit->log($document, 'email.failed', $request, null, $signer, [
+                    'email' => $email,
+                    'error' => $e->getMessage(),
+                ]);
+
+                return false;
+            }
         }
     }
 }

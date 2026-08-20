@@ -31,6 +31,7 @@ export interface MailInvitations {
   sent?: string[];
   failed?: string[];
   mailer?: string;
+  error?: string;
 }
 
 export interface DocumentItem {

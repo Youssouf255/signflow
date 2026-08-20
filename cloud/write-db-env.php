@@ -70,6 +70,9 @@ if ($mailHost === '' && str_contains($mailUser, '@')) {
 $mailPort = $clean(getenv('MAIL_PORT') ?: '587');
 $mailEncryption = $clean(getenv('MAIL_ENCRYPTION') ?: 'tls');
 $mailFrom = $clean(getenv('MAIL_FROM_ADDRESS') ?: $mailUser);
+if ($mailFrom === '' || str_contains($mailFrom, 'signflow.local') || str_contains($mailFrom, 'example.com')) {
+    $mailFrom = $mailUser;
+}
 $mailFromName = $clean(getenv('MAIL_FROM_NAME') ?: 'SignFlow');
 $mailer = $clean(getenv('MAIL_MAILER') ?: '');
 if ($mailUser !== '' && $mailPass !== '' && $mailHost !== '') {
@@ -86,7 +89,7 @@ $keys = [
     'DB_URL', 'DATABASE_URL', 'DB_SSLMODE',
     'SESSION_DRIVER', 'QUEUE_CONNECTION', 'CACHE_STORE', 'CACHE_DRIVER',
     'FILESYSTEM_DISK', 'MAIL_MAILER', 'MAIL_HOST', 'MAIL_PORT', 'MAIL_USERNAME',
-    'MAIL_PASSWORD', 'MAIL_ENCRYPTION', 'MAIL_FROM_ADDRESS', 'MAIL_FROM_NAME', 'MAIL_EHLO_DOMAIN',
+    'MAIL_PASSWORD', 'MAIL_ENCRYPTION', 'MAIL_SCHEME', 'MAIL_FROM_ADDRESS', 'MAIL_FROM_NAME', 'MAIL_EHLO_DOMAIN',
     'LOG_CHANNEL', 'REDIS_CLIENT',
 ];
 $lines = preg_split("/\r\n|\n|\r/", $env) ?: [];
@@ -132,6 +135,7 @@ $lines[] = 'MAIL_PORT='.$quote($mailPort !== '' ? $mailPort : '587');
 $lines[] = 'MAIL_USERNAME='.$quote($mailUser);
 $lines[] = 'MAIL_PASSWORD='.$quote($mailPass);
 $lines[] = 'MAIL_ENCRYPTION='.$quote($mailEncryption !== '' ? $mailEncryption : 'tls');
+$lines[] = 'MAIL_SCHEME=smtp';
 $lines[] = 'MAIL_FROM_ADDRESS='.$quote($mailFrom !== '' ? $mailFrom : 'noreply@signflow.local');
 $lines[] = 'MAIL_FROM_NAME='.$quote($mailFromName !== '' ? $mailFromName : 'SignFlow');
 $lines[] = 'LOG_CHANNEL=stderr';

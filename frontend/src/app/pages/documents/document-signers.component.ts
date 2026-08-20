@@ -181,7 +181,12 @@ export class DocumentSignersComponent implements OnInit {
         const sent = doc.invitations?.sent || [];
         const failed = doc.invitations?.failed || [];
         if (failed.length && !sent.length) {
-          this.error.set('Signataires enregistrés, mais aucun e-mail n’a pu partir. Vérifiez SMTP sur Render (MAIL_USERNAME / MAIL_PASSWORD). Échec : ' + failed.join(', '));
+          this.error.set(
+            'Signataires enregistrés, mais aucun e-mail n’a pu partir. ' +
+              (doc.invitations?.error ? 'Erreur SMTP : ' + doc.invitations.error + ' ' : '') +
+              'Échec : ' +
+              failed.join(', ')
+          );
           return;
         }
         const extra = failed.length ? ' Échec pour : ' + failed.join(', ') : '';
