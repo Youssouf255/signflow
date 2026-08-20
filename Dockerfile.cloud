@@ -3,6 +3,8 @@
 
 FROM node:20-alpine AS frontend
 WORKDIR /app
+ENV NODE_OPTIONS=--max-old-space-size=2048
+ENV NG_BUILD_MAX_WORKERS=1
 COPY frontend/package.json frontend/package-lock.json* ./
 RUN npm install --legacy-peer-deps
 COPY frontend/ ./

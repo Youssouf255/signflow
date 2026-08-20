@@ -462,7 +462,7 @@ class DocumentService
             'smtp_ready' => $this->gmail->hasCredentials(),
             'smtp_user' => $this->gmail->username() ?: null,
             'pending' => $pending,
-            'last_error' => data_get($pending, '0.last_error') ?: ($lastFail?->metadata['error'] ?? null),
+            'last_error' => data_get($pending, '0.last_error') ?: data_get($lastFail, 'metadata.error'),
             'last_delivered_at' => $lastOk?->created_at,
             'last_failed_at' => $lastFail?->created_at,
         ];

@@ -72,12 +72,14 @@ import { AuditLog, DocumentItem, DocumentService, SignatureField, Signer } from 
                 </button>
               </div>
             }
-            @if (d.mail_status && !d.mail_status.smtp_ready) {
+            @if (smtpMissing()) {
               <p class="mail-err">Gmail n’est pas configuré sur le serveur (MAIL_USERNAME / MAIL_PASSWORD). Les e-mails ne peuvent pas partir.</p>
-            } @else if (d.mail_status?.last_error) {
-              <p class="mail-err">Dernière erreur e-mail : {{ d.mail_status.last_error }}</p>
-            } @else if (d.mail_status?.last_delivered_at) {
-              <p class="mail-ok">Gmail a accepté un envoi. Vérifiez aussi le compte {{ d.mail_status.smtp_user }} (boîte Envoyés) et le spam Yahoo.</p>
+            }
+            @if (mailError()) {
+              <p class="mail-err">Dernière erreur e-mail : {{ mailError() }}</p>
+            }
+            @if (mailDeliveredHint()) {
+              <p class="mail-ok">{{ mailDeliveredHint() }}</p>
             }
           </div>
         }
@@ -182,6 +184,24 @@ export class DocumentDetailComponent implements OnInit {
       .filter((s) => s.role !== 'observer' && !['signed', 'approved', 'declined'].includes(s.status || ''))
       .sort((a, b) => (a.signing_order || 0) - (b.signing_order || 0));
     return list[0] || null;
+  }
+
+  smtpMissing(): boolean {
+    const status = this.doc()?.mail_status;
+    return !!status && status.smtp_ready === false;
+  }
+
+  mailError(): string {
+    return this.doc()?.mail_status?.last_error || '';
+  }
+
+  mailDeliveredHint(): string {
+    const status = this.doc()?.mail_status;
+    if (!status?.last_delivered_at || this.mailError()) {
+      return '';
+    }
+    const account = status.smtp_user || 'Gmail';
+    return 'Gmail a accepté un envoi. Vérifiez aussi le compte ' + account + ' (boîte Envoyés) et le spam Yahoo.';
   }
 
   resendInvite() {
