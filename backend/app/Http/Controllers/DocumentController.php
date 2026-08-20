@@ -119,7 +119,13 @@ class DocumentController extends Controller
             'signers.*.role' => ['required', 'in:signer,observer,approver'],
         ]);
 
-        $document = $this->documents->syncSigners($document, $data['signers'], $request, $request->user());
+        try {
+            $document = $this->documents->syncSigners($document, $data['signers'], $request, $request->user());
+        } catch (\Throwable $e) {
+            return response()->json([
+                'message' => "Signataires : ".$e->getMessage(),
+            ], 500);
+        }
 
         return response()->json($document);
     }

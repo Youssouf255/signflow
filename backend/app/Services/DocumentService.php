@@ -108,8 +108,20 @@ class DocumentService
             return $document->fresh(['signers', 'fields']);
         });
 
-        $toInvite = $document->signers->filter(fn (Signer $signer) => in_array($signer->id, $newSignerIds, false));
-        $invitations = $this->inviteSigners($document, $toInvite, $request);
+        try {
+            @set_time_limit(60);
+            @ini_set('default_socket_timeout', '8');
+            $toInvite = $document->signers->filter(fn (Signer $signer) => in_array((int) $signer->id, array_map('intval', $newSignerIds), true));
+            $invitations = $this->inviteSigners($document, $toInvite, $request);
+        } catch (\Throwable $e) {
+            Log::error('Invitation apres enregistrement signataires : '.$e->getMessage());
+            $invitations = [
+                'sent' => [],
+                'failed' => $document->signers->pluck('email')->all(),
+                'mailer' => config('mail.default'),
+                'error' => $e->getMessage(),
+            ];
+        }
         $document->setAttribute('invitations', $invitations);
 
         return $document;
@@ -367,38 +379,27 @@ class DocumentService
         }
 
         try {
-            Mail::mailer('smtp')->to($email)->send($mailable);
+            Mail::to($email)->send($mailable);
             $this->audit->log($document, 'email.delivered', $request, null, $signer, [
                 'email' => $email,
-                'mailer' => 'smtp',
+                'mailer' => config('mail.default'),
             ]);
 
             return true;
-        } catch (\Throwable $first) {
-            try {
-                Mail::mailer('smtp_ssl')->to($email)->send($mailable);
-                $this->audit->log($document, 'email.delivered', $request, null, $signer, [
-                    'email' => $email,
-                    'mailer' => 'smtp_ssl',
-                ]);
+        } catch (\Throwable $e) {
+            $this->lastMailError = $e->getMessage();
+            Log::error('Echec envoi email SignFlow : '.$e->getMessage(), [
+                'email' => $email,
+                'document_id' => $document->id,
+                'mailer' => config('mail.default'),
+                'username' => config('mail.mailers.smtp.username'),
+            ]);
+            $this->audit->log($document, 'email.failed', $request, null, $signer, [
+                'email' => $email,
+                'error' => mb_substr($e->getMessage(), 0, 500),
+            ]);
 
-                return true;
-            } catch (\Throwable $e) {
-                $this->lastMailError = $e->getMessage();
-                Log::error('Echec envoi email SignFlow : '.$e->getMessage(), [
-                    'email' => $email,
-                    'document_id' => $document->id,
-                    'first_error' => $first->getMessage(),
-                    'mailer' => config('mail.default'),
-                    'username' => config('mail.mailers.smtp.username'),
-                ]);
-                $this->audit->log($document, 'email.failed', $request, null, $signer, [
-                    'email' => $email,
-                    'error' => $e->getMessage(),
-                ]);
-
-                return false;
-            }
+            return false;
         }
     }
 }

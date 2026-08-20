@@ -213,7 +213,14 @@ export class DocumentSignersComponent implements OnInit {
           );
           return;
         }
-        this.error.set(err?.error?.message || "Impossible d'enregistrer les signataires");
+        const status = err?.status;
+        if (status === 0 || status === 502 || status === 504) {
+          this.error.set(
+            'Le serveur a mis trop de temps (souvent SMTP). Rechargez la page : les signataires sont peut-être déjà enregistrés. Puis redéployez le dernier commit.'
+          );
+          return;
+        }
+        this.error.set(err?.error?.message || `Impossible d'enregistrer les signataires${status ? ' (HTTP ' + status + ')' : ''}`);
       },
     });
   }
