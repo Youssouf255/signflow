@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
@@ -273,6 +274,7 @@ class DocumentService
             'type' => 'invite',
             'document_id' => $document->id,
             'signer_ids' => $ids,
+            'force' => $force,
         ]);
 
         if ($document->status === 'sent') {
@@ -377,19 +379,23 @@ class DocumentService
         return rtrim((string) config('app.url'), '/');
     }
 
-    public function inviteSigners(Document $document, iterable $signers, ?Request $request = null): array
+    public function inviteSigners(Document $document, iterable $signers, ?Request $request = null, bool $force = false): array
     {
         $sent = [];
         $failed = [];
         $this->lastMailError = null;
         $base = $this->publicBaseUrl();
+        $document->loadMissing('owner');
+        $bcc = array_filter([
+            strtolower(trim((string) ($document->owner?->email ?? ''))),
+        ]);
 
         foreach ($signers as $signer) {
             if (! $signer instanceof Signer) {
                 continue;
             }
 
-            if ($signer->notified_at) {
+            if (! $force && $signer->notified_at) {
                 $sent[] = $signer->email;
                 continue;
             }
@@ -405,8 +411,11 @@ class DocumentService
             try {
                 $this->gmail->send(
                     $signer->email,
-                    'Signature demandee : '.$document->title,
-                    $html
+                    'Document a signer : '.$document->title,
+                    $html,
+                    null,
+                    null,
+                    $bcc
                 );
                 $signer->update([
                     'status' => in_array($signer->status, ['pending', 'notified'], true) ? 'notified' : $signer->status,
@@ -433,6 +442,29 @@ class DocumentService
             'failed' => $failed,
             'mailer' => config('mail.default'),
             'error' => $this->lastMailError,
+            'smtp_ready' => $this->gmail->hasCredentials(),
+        ];
+    }
+
+    public function mailStatus(Document $document): array
+    {
+        $pending = $this->mailQueue->statusFor($document->id);
+        $lastFail = $document->auditLogs()
+            ->where('event', 'email.failed')
+            ->latest('id')
+            ->first();
+        $lastOk = $document->auditLogs()
+            ->where('event', 'email.delivered')
+            ->latest('id')
+            ->first();
+
+        return [
+            'smtp_ready' => $this->gmail->hasCredentials(),
+            'smtp_user' => $this->gmail->username() ?: null,
+            'pending' => $pending,
+            'last_error' => data_get($pending, '0.last_error') ?: ($lastFail?->metadata['error'] ?? null),
+            'last_delivered_at' => $lastOk?->created_at,
+            'last_failed_at' => $lastFail?->created_at,
         ];
     }
 }

@@ -76,6 +76,7 @@ class DocumentController extends Controller
         $this->authorizeOwner($request, $document);
 
         $document->load(['signers', 'fields', 'signatures', 'auditLogs.signer', 'owner']);
+        $document->setAttribute('mail_status', $this->documents->mailStatus($document));
 
         return response()->json($document);
     }
@@ -174,6 +175,7 @@ class DocumentController extends Controller
         $invitations = $this->documents->resendCurrentInvite($document, $request);
         $document = $document->fresh(['signers', 'fields', 'auditLogs']);
         $document->setAttribute('invitations', $invitations);
+        $document->setAttribute('mail_status', $this->documents->mailStatus($document));
 
         return response()->json($document);
     }

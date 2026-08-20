@@ -46,16 +46,15 @@ class SendPendingMailCommand extends Command
                 }
 
                 $targets = $document->signers
-                    ->filter(fn ($signer) => in_array((int) $signer->id, $ids, true))
-                    ->filter(fn ($signer) => $signer->notified_at === null);
+                    ->filter(fn ($signer) => in_array((int) $signer->id, $ids, true));
 
                 if ($targets->isEmpty()) {
-                    $queue->ack($job);
-                    $this->info('invite deja envoyee document='.$document->id);
+                    $this->warn('signataires introuvables document='.$document->id);
+                    $queue->nack($job, 'signataires introuvables');
                     continue;
                 }
 
-                $result = $documents->inviteSigners($document, $targets);
+                $result = $documents->inviteSigners($document, $targets, null, true);
                 $failed = $result['failed'] ?? [];
                 $this->info('invite sent='.count($result['sent'] ?? []).' failed='.count($failed));
 

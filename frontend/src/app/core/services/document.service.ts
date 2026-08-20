@@ -52,6 +52,14 @@ export interface DocumentItem {
   signed_hash?: string;
   reference?: string;
   invitations?: MailInvitations;
+  mail_status?: {
+    smtp_ready?: boolean;
+    smtp_user?: string | null;
+    last_error?: string | null;
+    last_delivered_at?: string | null;
+    last_failed_at?: string | null;
+    pending?: { last_error?: string; attempts?: number }[];
+  };
 }
 
 export interface AuditLog {

@@ -72,6 +72,13 @@ import { AuditLog, DocumentItem, DocumentService, SignatureField, Signer } from 
                 </button>
               </div>
             }
+            @if (d.mail_status && !d.mail_status.smtp_ready) {
+              <p class="mail-err">Gmail n’est pas configuré sur le serveur (MAIL_USERNAME / MAIL_PASSWORD). Les e-mails ne peuvent pas partir.</p>
+            } @else if (d.mail_status?.last_error) {
+              <p class="mail-err">Dernière erreur e-mail : {{ d.mail_status.last_error }}</p>
+            } @else if (d.mail_status?.last_delivered_at) {
+              <p class="mail-ok">Gmail a accepté un envoi. Vérifiez aussi le compte {{ d.mail_status.smtp_user }} (boîte Envoyés) et le spam Yahoo.</p>
+            }
           </div>
         }
 
@@ -125,6 +132,8 @@ import { AuditLog, DocumentItem, DocumentService, SignatureField, Signer } from 
     .notice.warn{background:#fffbeb;border-color:#fde68a;color:#92400e;}
     .notice.success{background:#D6EAF8;border-color:#0468B1;color:#023A6C;}
     .resend-row{display:flex;flex-wrap:wrap;gap:.6rem;align-items:center;margin-top:.75rem;}
+    .mail-err{margin:.75rem 0 0;color:#b45309;font-weight:600;}
+    .mail-ok{margin:.75rem 0 0;color:#0f7b3a;font-weight:600;}
     .grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem;}
     section{background:rgba(255,255,255,.78);border:1px solid rgba(4,104,177,.12);border-radius:.9rem;padding:1rem;}
     .item{padding:.75rem 0;border-bottom:1px solid #e2e8f0;display:grid;gap:.35rem;}
@@ -191,8 +200,8 @@ export class DocumentDetailComponent implements OnInit {
         } else {
           const email = to[0] || pending?.email || 'le signataire en cours';
           this.info.set(
-            'L’invitation va partir dans quelques secondes vers ' + email +
-            '. Demandez de vérifier la boîte de réception et les courriers indésirables (spam Yahoo).'
+            'Nouvelle tentative lancée vers ' + email +
+            '. Une copie part aussi vers la boîte Gmail d’envoi. Vérifiez spam Yahoo et les messages envoyés Gmail.'
           );
         }
         this.reload();
