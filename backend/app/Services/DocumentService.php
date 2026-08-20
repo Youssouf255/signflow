@@ -2,8 +2,6 @@
 
 namespace App\Services;
 
-use App\Mail\DocumentCompletedMail;
-use App\Mail\SigningInvitationMail;
 use App\Models\Document;
 use App\Models\Signer;
 use App\Models\User;
@@ -11,7 +9,6 @@ use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
@@ -23,7 +20,8 @@ class DocumentService
         private AuditService $audit,
         private PdfService $pdf,
         private DocumentConversionService $conversion,
-        private DocumentPayloadStore $payloads
+        private DocumentPayloadStore $payloads,
+        private GmailSmtpSender $gmail
     ) {}
 
     public function create(User $owner, array $data, UploadedFile $file, Request $request): Document
@@ -108,44 +106,14 @@ class DocumentService
             return $document->fresh(['signers', 'fields']);
         });
 
-        $this->dispatchInvites((int) $document->id, $newSignerIds);
-        $document->setAttribute('invitations', [
-            'sent' => [],
-            'failed' => [],
-            'queued' => true,
-            'mailer' => config('mail.default'),
-            'error' => null,
-        ]);
+        @set_time_limit(90);
+        $toInvite = $document->signers->filter(
+            fn (Signer $signer) => in_array((int) $signer->id, array_map('intval', $newSignerIds), true)
+        );
+        $invitations = $this->inviteSigners($document, $toInvite, $request);
+        $document->setAttribute('invitations', $invitations);
 
         return $document;
-    }
-
-    public function dispatchInvites(int $documentId, array $signerIds): void
-    {
-        $signerIds = array_values(array_filter(array_map('intval', $signerIds)));
-        if ($signerIds === []) {
-            return;
-        }
-
-        if (PHP_OS_FAMILY === 'Windows') {
-            $document = Document::with('signers')->find($documentId);
-            if ($document) {
-                $targets = $document->signers->filter(fn (Signer $signer) => in_array((int) $signer->id, $signerIds, true));
-                $this->inviteSigners($document, $targets);
-            }
-
-            return;
-        }
-
-        $cmd = sprintf(
-            'nohup %s %s signflow:invite-signers %d %s >> %s 2>&1 &',
-            escapeshellarg(PHP_BINARY),
-            escapeshellarg(base_path('artisan')),
-            $documentId,
-            escapeshellarg(implode(',', $signerIds)),
-            escapeshellarg(storage_path('logs/mail-invite.log'))
-        );
-        @exec($cmd);
     }
 
     public function syncFields(Document $document, array $fields, Request $request, User $user): Document
@@ -259,35 +227,28 @@ class DocumentService
         ]);
 
         $this->audit->log($document, 'document.sent', $request, $user);
-        $this->notifyNextSigners($document, $request);
+        $invitations = $this->notifyNextSigners($document, $request);
 
         $document = $document->fresh(['signers', 'fields', 'auditLogs']);
-        $document->setAttribute('invitations', [
-            'queued' => true,
-            'mailer' => config('mail.default'),
-        ]);
+        $document->setAttribute('invitations', $invitations);
 
         return $document;
     }
 
     public function notifyNextSigners(Document $document, ?Request $request = null): array
     {
-        $ids = $document->signers()
+        $targets = $document->signers()
             ->whereNotIn('status', ['signed', 'approved', 'declined'])
             ->whereNull('notified_at')
-            ->pluck('id')
-            ->all();
+            ->get();
 
-        $this->dispatchInvites((int) $document->id, $ids);
+        $invitations = $this->inviteSigners($document, $targets, $request);
 
         if ($document->status === 'sent') {
             $document->update(['status' => 'in_progress']);
         }
 
-        return [
-            'queued' => true,
-            'mailer' => config('mail.default'),
-        ];
+        return $invitations;
     }
 
     public function notifyDocumentCompleted(Document $document, ?Request $request = null): void
@@ -305,6 +266,10 @@ class DocumentService
 
         $filename = ($document->reference ?: 'document').'-signe.pdf';
         $sent = [];
+        $htmlBase = fn (string $name) => view('emails.document-completed', [
+            'document' => $document,
+            'recipientName' => $name,
+        ])->render();
 
         foreach ($document->signers as $signer) {
             $email = strtolower(trim((string) $signer->email));
@@ -312,27 +277,37 @@ class DocumentService
                 continue;
             }
 
-            $ok = $this->deliverMail(
-                $signer->email,
-                new DocumentCompletedMail($document, $signer->first_name ?: $signer->full_name, $absolute, $filename),
-                $document,
-                $request,
-                $signer
-            );
-
-            if ($ok) {
+            try {
+                $this->gmail->send(
+                    $signer->email,
+                    'Document signe : '.$document->title,
+                    $htmlBase($signer->first_name ?: $signer->full_name),
+                    $absolute,
+                    $filename
+                );
                 $sent[$email] = true;
+                $this->audit->log($document, 'email.delivered', $request, null, $signer, [
+                    'email' => $signer->email,
+                    'type' => 'completed',
+                ]);
+            } catch (\Throwable $e) {
+                Log::error('Echec PDF final : '.$e->getMessage());
             }
         }
 
         $ownerEmail = strtolower(trim((string) ($document->owner?->email ?? '')));
         if ($ownerEmail !== '' && ! isset($sent[$ownerEmail])) {
-            $this->deliverMail(
-                $document->owner->email,
-                new DocumentCompletedMail($document, $document->owner->name ?: 'destinataire', $absolute, $filename),
-                $document,
-                $request
-            );
+            try {
+                $this->gmail->send(
+                    $document->owner->email,
+                    'Document signe : '.$document->title,
+                    $htmlBase($document->owner->name ?: 'destinataire'),
+                    $absolute,
+                    $filename
+                );
+            } catch (\Throwable $e) {
+                Log::error('Echec PDF final proprietaire : '.$e->getMessage());
+            }
         }
     }
 
@@ -358,23 +333,37 @@ class DocumentService
                 continue;
             }
 
+            $signer->makeVisible(['access_token']);
             $link = $base.'/sign/'.$signer->access_token;
-            $ok = $this->deliverMail(
-                $signer->email,
-                new SigningInvitationMail($document, $signer, $link),
-                $document,
-                $request,
-                $signer
-            );
+            $html = view('emails.signing-invitation', [
+                'document' => $document,
+                'signer' => $signer,
+                'link' => $link,
+            ])->render();
 
-            if ($ok) {
+            try {
+                $this->gmail->send(
+                    $signer->email,
+                    'Signature demandee : '.$document->title,
+                    $html
+                );
                 $signer->update([
                     'status' => in_array($signer->status, ['pending', 'notified'], true) ? 'notified' : $signer->status,
                     'notified_at' => now(),
                 ]);
                 $sent[] = $signer->email;
-            } else {
+                $this->audit->log($document, 'email.delivered', $request, null, $signer, [
+                    'email' => $signer->email,
+                    'mailer' => 'gmail-smtp',
+                ]);
+            } catch (\Throwable $e) {
+                $this->lastMailError = $e->getMessage();
                 $failed[] = $signer->email;
+                Log::error('Echec invitation '.$signer->email.' : '.$e->getMessage());
+                $this->audit->log($document, 'email.failed', $request, null, $signer, [
+                    'email' => $signer->email,
+                    'error' => mb_substr($e->getMessage(), 0, 500),
+                ]);
             }
         }
 
@@ -384,59 +373,5 @@ class DocumentService
             'mailer' => config('mail.default'),
             'error' => $this->lastMailError,
         ];
-    }
-
-    private function deliverMail(
-        string $email,
-        object $mailable,
-        Document $document,
-        ?Request $request = null,
-        ?Signer $signer = null
-    ): bool {
-        $email = trim($email);
-        if ($email === '') {
-            return false;
-        }
-
-        $username = (string) config('mail.mailers.smtp.username');
-        if (config('mail.default') === 'log' || $username === '') {
-            $this->lastMailError = 'SMTP non configure. Ajoutez MAIL_USERNAME, MAIL_PASSWORD et MAIL_FROM_ADDRESS dans Render, puis redeployez.';
-            Log::error($this->lastMailError);
-
-            return false;
-        }
-
-        try {
-            Mail::mailer('smtp')->to($email)->send($mailable);
-            $this->audit->log($document, 'email.delivered', $request, null, $signer, [
-                'email' => $email,
-                'mailer' => 'smtp',
-            ]);
-
-            return true;
-        } catch (\Throwable $first) {
-            try {
-                Mail::mailer('smtp_ssl')->to($email)->send($mailable);
-                $this->audit->log($document, 'email.delivered', $request, null, $signer, [
-                    'email' => $email,
-                    'mailer' => 'smtp_ssl',
-                ]);
-
-                return true;
-            } catch (\Throwable $e) {
-                $this->lastMailError = $first->getMessage().' | '.$e->getMessage();
-                Log::error('Echec envoi email SignFlow : '.$this->lastMailError, [
-                    'email' => $email,
-                    'document_id' => $document->id,
-                    'username' => config('mail.mailers.smtp.username'),
-                ]);
-                $this->audit->log($document, 'email.failed', $request, null, $signer, [
-                    'email' => $email,
-                    'error' => mb_substr($this->lastMailError, 0, 500),
-                ]);
-
-                return false;
-            }
-        }
     }
 }

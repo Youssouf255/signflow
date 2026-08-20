@@ -177,9 +177,23 @@ export class DocumentSignersComponent implements OnInit {
     this.info.set('Enregistrement en cours…');
 
     this.documents.syncSigners(this.docId, payload).subscribe({
-      next: () => {
+      next: (doc) => {
         this.loading.set(false);
-        this.info.set('Signataires enregistrés.');
+        const sent = doc.invitations?.sent || [];
+        const failed = doc.invitations?.failed || [];
+        if (sent.length) {
+          this.info.set('Invitation envoyée à ' + sent.join(', ') + '.');
+        } else {
+          this.info.set('Signataires enregistrés.');
+        }
+        if (failed.length) {
+          this.error.set(
+            'E-mail non envoyé (' +
+              failed.join(', ') +
+              '). ' +
+              (doc.invitations?.error || 'Vérifiez MAIL_PASSWORD (mot de passe d’application Gmail).')
+          );
+        }
         void this.router.navigate(['/app/documents', this.docId, 'editor']);
       },
       error: (err) => {
